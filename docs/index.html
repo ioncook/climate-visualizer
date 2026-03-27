@@ -4,8 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Köppen Climate Visualizer</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
+  <title>Climate Visualizer</title>
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body {
@@ -18,6 +19,7 @@
       display: flex;
       flex-direction: column;
     }
+
     .header-bar {
       background: #121212;
       border-bottom: 1px solid #333;
@@ -27,9 +29,20 @@
       align-items: center;
       z-index: 1000;
     }
-    .controls { display: flex; gap: 15px; align-items: center; }
-    #map { flex-grow: 1; background: #000; }
-    select, button {
+
+    .controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    #map {
+      flex-grow: 1;
+      background: #000;
+    }
+
+    select,
+    button {
       background-color: #252525;
       color: #ffffff;
       border: 1px solid #444;
@@ -37,16 +50,19 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
     .leaflet-popup-content-wrapper {
       background: #1a1a1a !important;
       color: #fff !important;
       border: 1px solid #444;
       border-radius: 8px !important;
     }
+
     .leaflet-popup-tip {
       background: #1a1a1a !important;
       border: 1px solid #444;
     }
+
     .leaflet-tile {
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
@@ -59,7 +75,7 @@
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 20px;">🌍</span>
-      <h2 style="margin:0; font-size: 18px;">Köppen Climate</h2>
+      <h2 style="margin:0; font-size: 18px;">Climate Visualizer</h2>
       <span id="status" style="font-size: 11px; color:#555;">Ready</span>
     </div>
     <div class="controls">
@@ -89,17 +105,17 @@
       25: "rgb(0, 255, 255)", 26: "rgb(55, 200, 255)", 27: "rgb(0, 125, 125)", 28: "rgb(0, 70, 95)",
       29: "rgb(178, 178, 178)", 30: "rgb(102, 102, 102)"
     };
-    
+
     const LEGENDS = {
-        1: ["Af", "Tropical rainforest"], 2: ["Am", "Tropical monsoon"], 3: ["Aw", "Tropical savannah"],
-        4: ["BWh", "Arid desert, hot"], 5: ["BWk", "Arid desert, cold"], 6: ["BSh", "Arid steppe, hot"], 7: ["BSk", "Arid steppe, cold"],
-        8: ["Csa", "Temperate, dry summer, hot summer"], 9: ["Csb", "Temperate, dry summer, warm summer"], 10: ["Csc", "Temperate, dry summer, cold summer"],
-        11: ["Cwa", "Temperate, dry winter, hot summer"], 12: ["Cwb", "Temperate, dry winter, warm summer"], 13: ["Cwc", "Temperate, dry winter, cold summer"],
-        14: ["Cfa", "Temperate, no dry season, hot summer"], 15: ["Cfb", "Temperate, no dry season, warm summer"], 16: ["Cfc", "Temperate, no dry season, cold summer"],
-        17: ["Dsa", "Cold, dry summer, hot summer"], 18: ["Dsb", "Cold, dry summer, warm summer"], 19: ["Dsc", "Cold, dry summer, cold summer"], 20: ["Dsd", "Cold, dry summer, very cold winter"],
-        21: ["Dwa", "Cold, dry winter, hot summer"], 22: ["Dwb", "Cold, dry winter, warm summer"], 23: ["Dwc", "Cold, dry winter, cold summer"], 24: ["Dwd", "Cold, dry winter, very cold winter"],
-        25: ["Dfa", "Cold, no dry season, hot summer"], 26: ["Dfb", "Cold, no dry season, warm summer"], 27: ["Dfc", "Cold, no dry season, cold summer"], 28: ["Dfd", "Cold, no dry season, very cold winter"],
-        29: ["ET", "Polar tundra"], 30: ["EF", "Polar frost"]
+      1: ["Af", "Tropical rainforest"], 2: ["Am", "Tropical monsoon"], 3: ["Aw", "Tropical savannah"],
+      4: ["BWh", "Arid desert, hot"], 5: ["BWk", "Arid desert, cold"], 6: ["BSh", "Arid steppe, hot"], 7: ["BSk", "Arid steppe, cold"],
+      8: ["Csa", "Temperate, dry summer, hot summer"], 9: ["Csb", "Temperate, dry summer, warm summer"], 10: ["Csc", "Temperate, dry summer, cold summer"],
+      11: ["Cwa", "Temperate, dry winter, hot summer"], 12: ["Cwb", "Temperate, dry winter, warm summer"], 13: ["Cwc", "Temperate, dry winter, cold summer"],
+      14: ["Cfa", "Temperate, no dry season, hot summer"], 15: ["Cfb", "Temperate, no dry season, warm summer"], 16: ["Cfc", "Temperate, no dry season, cold summer"],
+      17: ["Dsa", "Cold, dry summer, hot summer"], 18: ["Dsb", "Cold, dry summer, warm summer"], 19: ["Dsc", "Cold, dry summer, cold summer"], 20: ["Dsd", "Cold, dry summer, very cold winter"],
+      21: ["Dwa", "Cold, dry winter, hot summer"], 22: ["Dwb", "Cold, dry winter, warm summer"], 23: ["Dwc", "Cold, dry winter, cold summer"], 24: ["Dwd", "Cold, dry winter, very cold winter"],
+      25: ["Dfa", "Cold, no dry season, hot summer"], 26: ["Dfb", "Cold, no dry season, warm summer"], 27: ["Dfc", "Cold, no dry season, cold summer"], 28: ["Dfd", "Cold, no dry season, very cold winter"],
+      29: ["ET", "Polar tundra"], 30: ["EF", "Polar frost"]
     };
 
     const map = L.map('map', { center: [20, 0], zoom: 3, zoomSnap: 0, wheelPxPerZoomLevel: 50, zoomControl: false });
@@ -128,24 +144,24 @@
 
     document.getElementById('status').innerText = "Downloading Geographic DB...";
     document.getElementById('resetBtn').onclick = () => map.setView([20, 0], 3);
-    
+
     // FETCH STATIC JSON DATABASE
     let queryDB = null;
     fetch('query_db.json').then(r => r.json()).then(data => {
-        queryDB = data;
-        document.getElementById('status').innerText = "Global Datasets Loaded";
+      queryDB = data;
+      document.getElementById('status').innerText = "Global Datasets Loaded";
     });
 
     // Helper for Rainbow Color Coding via HSL
     function getTempColor(t) {
       let clamped = Math.max(-30, Math.min(30, t));
-      let hue = 270 * (1 - (clamped + 30) / 60); 
+      let hue = 270 * (1 - (clamped + 30) / 60);
       return `hsl(${hue}, 100%, 65%)`;
     }
 
     function getPrecipColor(p) {
       let clamped = Math.max(0, Math.min(500, p));
-      let curve = Math.pow(clamped / 500, 0.7); 
+      let curve = Math.pow(clamped / 500, 0.7);
       let hue = 270 * curve;
       return `hsl(${hue}, 100%, 65%)`;
     }
@@ -159,7 +175,7 @@
       const y = Math.max(0, Math.min(359, Math.floor((90 - lat) / 180 * 360)));
       let x = Math.floor((lng + 180) / 360 * 720) % 720;
       x = x < 0 ? x + 720 : x;
-      
+
       const d = queryDB[`${y}_${x}`];
       if (!d) return; // Ocean or No Data
 
