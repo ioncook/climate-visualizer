@@ -78,13 +78,18 @@
       <span style="font-size: 20px;">🌍</span>
       <h2 style="margin:0; font-size: 18px;">Climate Visualizer</h2>
       <span id="status" style="font-size: 11px; color:#555;">Ready</span>
+      <a href="https://github.com/ioncook/climate-visualizer" target="_blank"
+        style="font-size: 11px; color: #444; text-decoration: none; margin-left: 6px; border-left: 1px solid #333; padding-left: 6px;">View
+        Source</a>
     </div>
     <div class="controls">
       <select id="basemap">
         <option value="dark">Dark Matter</option>
         <option value="topo">Topography</option>
+        <option value="physical">Physical Map</option>
+        <option value="light">Clean Light Map</option>
+        <option value="osm">Open Street Map</option>
         <option value="satellite">Satellite</option>
-        <option value="osm">Standard (OSM)</option>
       </select>
       <select id="units">
         <option value="metric">Metric (°C/mm)</option>
@@ -127,8 +132,10 @@
     const BASEMAPS = {
       dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { subdomains: 'abcd' }),
       topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'),
-      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
-      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      physical: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}'),
+      light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { subdomains: 'abcd' }),
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}')
     };
 
     let currentBasemapLayer = BASEMAPS.dark.addTo(map);
@@ -138,9 +145,10 @@
       map.removeLayer(currentBasemapLayer);
       currentBasemapLayer = BASEMAPS[e.target.value];
       currentBasemapLayer.addTo(map);
-      
-      // Update opacity for lighter basemaps
-      const opacity = (e.target.value === 'topo' || e.target.value === 'osm') ? 0.9 : 0.7;
+
+      // Update opacity for better visibility on lighter/complex basemaps
+      const hiOpacity = ['topo', 'physical', 'light', 'osm', 'satellite'].includes(e.target.value);
+      const opacity = hiOpacity ? 0.9 : 0.7;
       koppenLayer.setOpacity(opacity);
       precipLayer.setOpacity(opacity);
       tempLayer.setOpacity(opacity);
@@ -166,16 +174,18 @@
 
     let currentMonth = "12"; // Default to annual
     let currentLayerType = 'koppen';
-    
+
     function updateLayers() {
       const lType = currentLayerType;
       const m = currentMonth;
-      
+
       map.removeLayer(koppenLayer);
       map.removeLayer(precipLayer);
       map.removeLayer(tempLayer);
-      
-      if (lType === 'koppen') {
+
+      if (lType === 'none') {
+        document.getElementById('status').innerText = "Overlays Disabled";
+      } else if (lType === 'koppen') {
         map.addLayer(koppenLayer);
         document.getElementById('status').innerText = "Static Köppen DB Active";
       } else if (lType === 'precip') {
@@ -193,8 +203,15 @@
 
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
-      if (type) currentLayerType = type;
-      if (month !== undefined) currentMonth = String(month);
+      const isSameType = (type === currentLayerType);
+      const isSameMonth = (month === undefined || String(month) === currentMonth);
+
+      if (isSameType && isSameMonth) {
+        currentLayerType = 'none';
+      } else {
+        if (type) currentLayerType = type;
+        if (month !== undefined) currentMonth = String(month);
+      }
       updateLayers();
     };
 
@@ -271,17 +288,17 @@
             <tr style="cursor: pointer;">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;" onclick="setLayer('temp', 12)">T°(${isMetric ? 'C' : 'F'})</td>
               ${d.t.map((t, idx) => {
-          const val = isMetric ? Math.round(t) : Math.round(t * 9 / 5 + 32);
-          return `<td style="color:${getTempColor(t)}; font-weight:bold;" onclick="setLayer('temp', ${idx})">${val}</td>`;
-        }).join('')}
+        const val = isMetric ? Math.round(t) : Math.round(t * 9 / 5 + 32);
+        return `<td style="color:${getTempColor(t)}; font-weight:bold;" onclick="setLayer('temp', ${idx})">${val}</td>`;
+      }).join('')}
               <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px; color:${getTempColor(avgTemp)};" onclick="setLayer('temp', 12)">${isMetric ? Math.round(avgTemp) : Math.round(avgTemp * 9 / 5 + 32)}</td>
             </tr>
             <tr style="cursor: pointer;">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;" onclick="setLayer('precip', 12)">P(${isMetric ? 'mm' : 'in'})</td>
               ${d.p.map((p, idx) => {
-          const val = isMetric ? Math.round(p) : (p / 25.4).toFixed(1);
-          return `<td style="color:${getPrecipColor(p / 2.5)}; font-weight:bold;" onclick="setLayer('precip', ${idx})">${val}</td>`;
-        }).join('')}
+        const val = isMetric ? Math.round(p) : (p / 25.4).toFixed(1);
+        return `<td style="color:${getPrecipColor(p / 2.5)}; font-weight:bold;" onclick="setLayer('precip', ${idx})">${val}</td>`;
+      }).join('')}
               <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px; color:${getPrecipColor(totalPrecip / 12)};" onclick="setLayer('precip', 12)">${isMetric ? Math.round(totalPrecip) : (totalPrecip / 25.4).toFixed(1)}</td>
             </tr>
           </table>
@@ -299,7 +316,7 @@
     // OFFLINE CLICK QUERY
     map.on('click', async (e) => {
       const { lat, lng } = e.latlng;
-      
+
       // Compute 10x10 degree grid id
       const latChunk = Math.floor(lat / 10) * 10;
       const lonChunk = Math.floor(lng / 10) * 10;
@@ -319,7 +336,7 @@
       }
 
       const db = queryCache[chunkKey];
-      
+
       // Map lat/long to 0.1 degree exact ensemble grid (3600x1800)
       const y = Math.max(0, Math.min(1799, Math.floor((90 - lat) / 180 * 1800)));
       let x = Math.floor((lng + 180) / 360 * 3600) % 3600;
