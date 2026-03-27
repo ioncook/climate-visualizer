@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Köppen Climate Visualizer</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #000000;
+      color: #e0e0e0;
+      padding: 0;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header-bar {
+      background: #121212;
+      border-bottom: 1px solid #333;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+    }
+    .controls { display: flex; gap: 15px; align-items: center; }
+    #map { flex-grow: 1; background: #000; }
+    select, button {
+      background-color: #252525;
+      color: #ffffff;
+      border: 1px solid #444;
+      padding: 5px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .leaflet-popup-content-wrapper {
+      background: #1a1a1a !important;
+      color: #fff !important;
+      border: 1px solid #444;
+      border-radius: 8px !important;
+    }
+    .leaflet-popup-tip {
+      background: #1a1a1a !important;
+      border: 1px solid #444;
+    }
+    .leaflet-tile {
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header-bar">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 20px;">🌍</span>
+      <h2 style="margin:0; font-size: 18px;">Köppen Climate</h2>
+      <span id="status" style="font-size: 11px; color:#555;">Ready</span>
+    </div>
+    <div class="controls">
+      <select id="layerType">
+        <option value="koppen">Köppen Climate</option>
+        <option value="precip">Annual Precip Avg</option>
+      </select>
+      <select id="period">
+        <option>1991 - 2020</option>
+      </select>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const COLORS = {
+      1: "rgb(0, 0, 255)", 2: "rgb(0, 120, 255)", 3: "rgb(70, 170, 250)", 4: "rgb(255, 0, 0)",
+      5: "rgb(255, 150, 150)", 6: "rgb(245, 165, 0)", 7: "rgb(255, 220, 100)", 8: "rgb(255, 255, 0)",
+      9: "rgb(200, 200, 0)", 10: "rgb(150, 150, 0)", 11: "rgb(150, 255, 150)", 12: "rgb(100, 200, 100)",
+      13: "rgb(50, 150, 50)", 14: "rgb(200, 255, 80)", 15: "rgb(100, 255, 80)", 16: "rgb(50, 200, 0)",
+      17: "rgb(255, 0, 255)", 18: "rgb(200, 0, 200)", 19: "rgb(150, 50, 150)", 20: "rgb(150, 100, 150)",
+      21: "rgb(170, 175, 255)", 22: "rgb(90, 120, 220)", 23: "rgb(75, 80, 180)", 24: "rgb(50, 0, 135)",
+      25: "rgb(0, 255, 255)", 26: "rgb(55, 200, 255)", 27: "rgb(0, 125, 125)", 28: "rgb(0, 70, 95)",
+      29: "rgb(178, 178, 178)", 30: "rgb(102, 102, 102)"
+    };
+    
+    const LEGENDS = {
+        1: ["Af", "Tropical rainforest"], 2: ["Am", "Tropical monsoon"], 3: ["Aw", "Tropical savannah"],
+        4: ["BWh", "Arid desert, hot"], 5: ["BWk", "Arid desert, cold"], 6: ["BSh", "Arid steppe, hot"], 7: ["BSk", "Arid steppe, cold"],
+        8: ["Csa", "Temperate, dry summer, hot summer"], 9: ["Csb", "Temperate, dry summer, warm summer"], 10: ["Csc", "Temperate, dry summer, cold summer"],
+        11: ["Cwa", "Temperate, dry winter, hot summer"], 12: ["Cwb", "Temperate, dry winter, warm summer"], 13: ["Cwc", "Temperate, dry winter, cold summer"],
+        14: ["Cfa", "Temperate, no dry season, hot summer"], 15: ["Cfb", "Temperate, no dry season, warm summer"], 16: ["Cfc", "Temperate, no dry season, cold summer"],
+        17: ["Dsa", "Cold, dry summer, hot summer"], 18: ["Dsb", "Cold, dry summer, warm summer"], 19: ["Dsc", "Cold, dry summer, cold summer"], 20: ["Dsd", "Cold, dry summer, very cold winter"],
+        21: ["Dwa", "Cold, dry winter, hot summer"], 22: ["Dwb", "Cold, dry winter, warm summer"], 23: ["Dwc", "Cold, dry winter, cold summer"], 24: ["Dwd", "Cold, dry winter, very cold winter"],
+        25: ["Dfa", "Cold, no dry season, hot summer"], 26: ["Dfb", "Cold, no dry season, warm summer"], 27: ["Dfc", "Cold, no dry season, cold summer"], 28: ["Dfd", "Cold, no dry season, very cold winter"],
+        29: ["ET", "Polar tundra"], 30: ["EF", "Polar frost"]
+    };
+
+    const map = L.map('map', { center: [20, 0], zoom: 3, zoomSnap: 0, wheelPxPerZoomLevel: 50, zoomControl: false });
+
+    // CARTO BASEMAP
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { subdomains: 'abcd' }).addTo(map);
+
+    // STATIC PRE-GENERATED CHUNKS
+    const koppenLayer = L.tileLayer('tiles_koppen/{z}/{x}/{y}.png', {
+      maxNativeZoom: 6, maxZoom: 10, opacity: 0.7, tms: false
+    }).addTo(map);
+
+    const precipLayer = L.tileLayer('tiles_precip/{z}/{x}/{y}.png', {
+      maxNativeZoom: 6, maxZoom: 10, opacity: 0.7, tms: false
+    });
+
+    document.getElementById('layerType').addEventListener('change', (e) => {
+      if (e.target.value === 'precip') {
+        map.removeLayer(koppenLayer); map.addLayer(precipLayer);
+        document.getElementById('status').innerText = "Static Precipitation DB Active";
+      } else {
+        map.removeLayer(precipLayer); map.addLayer(koppenLayer);
+        document.getElementById('status').innerText = "Static Köppen DB Active";
+      }
+    });
+
+    document.getElementById('status').innerText = "Downloading Geographic DB...";
+    document.getElementById('resetBtn').onclick = () => map.setView([20, 0], 3);
+    
+    // FETCH STATIC JSON DATABASE
+    let queryDB = null;
+    fetch('query_db.json').then(r => r.json()).then(data => {
+        queryDB = data;
+        document.getElementById('status').innerText = "Global Datasets Loaded";
+    });
+
+    // Helper for Rainbow Color Coding via HSL
+    function getTempColor(t) {
+      let clamped = Math.max(-30, Math.min(30, t));
+      let hue = 270 * (1 - (clamped + 30) / 60); 
+      return `hsl(${hue}, 100%, 65%)`;
+    }
+
+    function getPrecipColor(p) {
+      let clamped = Math.max(0, Math.min(500, p));
+      let curve = Math.pow(clamped / 500, 0.7); 
+      let hue = 270 * curve;
+      return `hsl(${hue}, 100%, 65%)`;
+    }
+
+    // OFFLINE CLICK QUERY
+    map.on('click', async (e) => {
+      const { lat, lng } = e.latlng;
+      if (!queryDB) return; // Not downloaded yet
+
+      // Map lat/long to 0.5 degree exact grid
+      const y = Math.max(0, Math.min(359, Math.floor((90 - lat) / 180 * 360)));
+      let x = Math.floor((lng + 180) / 360 * 720) % 720;
+      x = x < 0 ? x + 720 : x;
+      
+      const d = queryDB[`${y}_${x}`];
+      if (!d) return; // Ocean or No Data
+
+      const popup = L.popup({ maxWidth: 450 }).setLatLng(e.latlng);
+      const badgeColor = COLORS[d.i] || "rgb(68, 68, 68)";
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const info = LEGENDS[d.i] || ["Unk", "Unknown"];
+
+      const html = `
+        <div style="min-width: 320px;">
+          <div style="font-weight:700; color:#eee; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px;">
+            <span style="background:${badgeColor}; color:#000; text-shadow: 0px 0px 2px rgba(255,255,255,0.5); padding:2px 6px; border-radius:3px; margin-right:6px;">${info[0]}</span>
+            ${info[1]}
+          </div>
+          
+          <table style="width:100%; font-size:11px; border-collapse:collapse; text-align:center;">
+            <tr style="color:#aaa; border-bottom:1px solid #333;">
+              <td style="text-align:left; font-weight:bold; padding:2px 0;">Mo</td>
+              ${months.map(m => `<td>${m}</td>`).join('')}
+            </tr>
+            <tr>
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">T°C</td>
+              ${d.t.map(t => `<td style="color:${getTempColor(t)}; font-weight:bold;">${Math.round(t)}</td>`).join('')}
+            </tr>
+            <tr>
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">Pmm</td>
+              ${d.p.map(p => `<td style="color:${getPrecipColor(p)}; font-weight:bold;">${Math.round(p)}</td>`).join('')}
+            </tr>
+          </table>
+        </div>
+      `;
+      popup.setContent(html);
+      popup.openOn(map);
+    });
+  </script>
+</body>
+
+</html>
