@@ -208,20 +208,14 @@
       return `hsl(${hue}, 100%, 65%)`;
     }
 
-    // OFFLINE CLICK QUERY
-    map.on('click', async (e) => {
-      const { lat, lng } = e.latlng;
-      if (!queryDB) return; // Not downloaded yet
+    let lastQueryData = null;
+    let lastLatLng = null;
 
-      // Map lat/long to 0.5 degree exact grid
-      const y = Math.max(0, Math.min(359, Math.floor((90 - lat) / 180 * 360)));
-      let x = Math.floor((lng + 180) / 360 * 720) % 720;
-      x = x < 0 ? x + 720 : x;
+    function updatePopup() {
+      if (!lastQueryData || !lastLatLng) return;
+      const d = lastQueryData;
+      const latlng = lastLatLng;
 
-      const d = queryDB[`${y}_${x}`];
-      if (!d) return; // Ocean or No Data
-
-      const popup = L.popup({ maxWidth: 450 }).setLatLng(e.latlng);
       const badgeColor = COLORS[d.i] || "rgb(68, 68, 68)";
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const info = LEGENDS[d.i] || ["Unk", "Unknown"];
@@ -266,8 +260,28 @@
           </table>
         </div>
       `;
-      popup.setContent(html);
-      popup.openOn(map);
+      L.popup({ maxWidth: 450 }).setLatLng(latlng).setContent(html).openOn(map);
+    }
+
+    const unitsSelect = document.getElementById('units');
+    unitsSelect.addEventListener('change', updatePopup);
+
+    // OFFLINE CLICK QUERY
+    map.on('click', async (e) => {
+      const { lat, lng } = e.latlng;
+      if (!queryDB) return; // Not downloaded yet
+
+      // Map lat/long to 0.5 degree exact grid
+      const y = Math.max(0, Math.min(359, Math.floor((90 - lat) / 180 * 360)));
+      let x = Math.floor((lng + 180) / 360 * 720) % 720;
+      x = x < 0 ? x + 720 : x;
+
+      const d = queryDB[`${y}_${x}`];
+      if (!d) return; // Ocean or No Data
+
+      lastQueryData = d;
+      lastLatLng = e.latlng;
+      updatePopup();
     });
   </script>
 </body>
