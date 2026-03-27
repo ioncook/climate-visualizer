@@ -49,6 +49,7 @@
       padding: 5px 15px;
       border-radius: 4px;
       cursor: pointer;
+      font-family: inherit;
     }
 
     .leaflet-popup-content-wrapper {
@@ -83,10 +84,10 @@
         <option value="koppen">Köppen Climate</option>
         <option value="precip">Annual Precip Avg</option>
       </select>
-      <select id="period">
-        <option>1991 - 2020</option>
+      <select id="units">
+        <option value="metric">Metric (°C/mm)</option>
+        <option value="imperial" selected>Imperial (°F/in)</option>
       </select>
-      <button id="resetBtn">Reset</button>
     </div>
   </div>
 
@@ -143,7 +144,6 @@
     });
 
     document.getElementById('status').innerText = "Downloading Geographic DB...";
-    document.getElementById('resetBtn').onclick = () => map.setView([20, 0], 3);
 
     // FETCH STATIC JSON DATABASE
     let queryDB = null;
@@ -184,25 +184,40 @@
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const info = LEGENDS[d.i] || ["Unk", "Unknown"];
 
+      const unitType = document.getElementById('units').value;
+      const isMetric = unitType === 'metric';
+
+      const totalPrecip = d.p.reduce((acc, curr) => acc + curr, 0);
+      const displayTotal = isMetric ? `${Math.round(totalPrecip)}mm` : `${(totalPrecip / 25.4).toFixed(1)}in`;
+
       const html = `
         <div style="min-width: 320px;">
-          <div style="font-weight:700; color:#eee; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px;">
-            <span style="background:${badgeColor}; color:#000; text-shadow: 0px 0px 2px rgba(255,255,255,0.5); padding:2px 6px; border-radius:3px; margin-right:6px;">${info[0]}</span>
-            ${info[1]}
+          <div style="font-weight:700; color:#eee; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              <span style="background:${badgeColor}; color:#000; text-shadow: 0px 0px 2px rgba(255,255,255,0.5); padding:2px 6px; border-radius:3px; margin-right:8px;">${info[0]}</span>
+              ${info[1]}
+            </div>
+            <div style="font-size: 11px; color: #888;">Avg: ${displayTotal} / yr</div>
           </div>
           
-          <table style="width:100%; font-size:11px; border-collapse:collapse; text-align:center;">
+          <table style="width:100%; font-size:11px; border-collapse:collapse; text-align:center; font-family: inherit;">
             <tr style="color:#aaa; border-bottom:1px solid #333;">
-              <td style="text-align:left; font-weight:bold; padding:2px 0;">Mo</td>
+              <td style="text-align:left; font-weight:bold; padding:2px 0;"></td>
               ${months.map(m => `<td>${m}</td>`).join('')}
             </tr>
             <tr>
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">T°C</td>
-              ${d.t.map(t => `<td style="color:${getTempColor(t)}; font-weight:bold;">${Math.round(t)}</td>`).join('')}
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;">T°(${isMetric ? 'C' : 'F'})</td>
+              ${d.t.map(t => {
+          const val = isMetric ? Math.round(t) : Math.round(t * 9 / 5 + 32);
+          return `<td style="color:${getTempColor(t)}; font-weight:bold;">${val}</td>`;
+        }).join('')}
             </tr>
             <tr>
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">Pmm</td>
-              ${d.p.map(p => `<td style="color:${getPrecipColor(p)}; font-weight:bold;">${Math.round(p)}</td>`).join('')}
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;">P(${isMetric ? 'mm' : 'in'})</td>
+              ${d.p.map(p => {
+          const val = isMetric ? Math.round(p) : (p / 25.4).toFixed(1);
+          return `<td style="color:${getPrecipColor(p)}; font-weight:bold;">${val}</td>`;
+        }).join('')}
             </tr>
           </table>
         </div>
