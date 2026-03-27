@@ -55,6 +55,14 @@ for p in range(501):
     r, g, b = colorsys.hls_to_rgb(hue, 0.65, 1.0)
     precip_lut[p] = [int(r*255), int(g*255), int(b*255), 200]
 
+mean_temp = np.mean(temp_data, axis=0)
+temp_lut = np.zeros((100, 4), dtype=np.uint8)
+for t in range(-40, 60):
+    clamped = max(-30, min(30, t))
+    hue = 270 * (1 - (clamped + 30) / 60)
+    r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.65, 1.0)
+    temp_lut[t + 40] = [int(r*255), int(g*255), int(b*255), 200]
+
 
 # 3. BUILD QUERY DATABASE (Sparse JSON of Land data at 0.5 degrees)
 print("Building Static Global Query Database...")
@@ -122,12 +130,15 @@ def process_tile(args):
     os.makedirs(koppen_dir, exist_ok=True)
     koppen_path = os.path.join(koppen_dir, f'{y}.png')
     
-    # PRECIP
-    precip_dir = os.path.join(OUT_DIR, f'tiles_precip/{z}/{x}')
-    os.makedirs(precip_dir, exist_ok=True)
-    precip_path = os.path.join(precip_dir, f'{y}.png')
-    
-    if os.path.exists(koppen_path) and os.path.exists(precip_path):
+    # Check if all files exist (koppen, 13 temp, 13 precip)
+    all_exist = os.path.exists(koppen_path)
+    if all_exist:
+        for m in range(13):
+            if not os.path.exists(os.path.join(OUT_DIR, f'tiles_temp/{m}/{z}/{x}/{y}.png')) or \
+               not os.path.exists(os.path.join(OUT_DIR, f'tiles_precip/{m}/{z}/{x}/{y}.png')):
+                all_exist = False
+                break
+    if all_exist:
         return True
 
     lons, lats = _gen_arrays(z, x, y)
@@ -158,17 +169,43 @@ def process_tile(args):
         img_k[void_mask] = [0, 0, 0, 0]
         Image.fromarray(img_k, 'RGBA').save(koppen_path)
 
-    # 2. PRECIP IMAGE
-    if not os.path.exists(precip_path):
-        tile_precips = mean_precip[LAT_IDX, LON_IDX]
-        clamped = np.clip(tile_precips, 0, 500).astype(int)
-        img_p = precip_lut[clamped]
+    # 2. PRECIP IMAGES
+    for m in range(13):
+        precip_m_dir = os.path.join(OUT_DIR, f'tiles_precip/{m}/{z}/{x}')
+        os.makedirs(precip_m_dir, exist_ok=True)
+        precip_m_path = os.path.join(precip_m_dir, f'{y}.png')
+
+        if not os.path.exists(precip_m_path):
+            if m == 12:
+                tile_precips = mean_precip[LAT_IDX, LON_IDX]
+            else:
+                tile_precips = precip_data[m, LAT_IDX, LON_IDX]
+                
+            clamped_p = np.clip(tile_precips, 0, 500).astype(int)
+            img_p = precip_lut[clamped_p].copy()
+            
+            img_p[water_mask] = [0, 0, 0, 0]
+            img_p[void_mask] = [0, 0, 0, 0]
+            Image.fromarray(img_p, 'RGBA').save(precip_m_path)
+
+    # 3. TEMP IMAGES
+    for m in range(13):
+        temp_dir = os.path.join(OUT_DIR, f'tiles_temp/{m}/{z}/{x}')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, f'{y}.png')
         
-        zero_mask = tile_precips == 0
-        img_p[zero_mask] = [0, 0, 0, 0]
-        img_p[water_mask] = [0, 0, 0, 0]
-        img_p[void_mask] = [0, 0, 0, 0]
-        Image.fromarray(img_p, 'RGBA').save(precip_path)
+        if not os.path.exists(temp_path):
+            if m == 12:
+                tile_temps = mean_temp[LAT_IDX, LON_IDX]
+            else:
+                tile_temps = temp_data[m, LAT_IDX, LON_IDX]
+                
+            clamped_t = np.clip(tile_temps, -40, 59).astype(int) + 40
+            img_t = temp_lut[clamped_t].copy()
+            
+            img_t[water_mask] = [0, 0, 0, 0]
+            img_t[void_mask] = [0, 0, 0, 0]
+            Image.fromarray(img_t, 'RGBA').save(temp_path)
 
     return True
 

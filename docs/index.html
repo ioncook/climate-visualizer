@@ -80,10 +80,6 @@
       <span id="status" style="font-size: 11px; color:#555;">Ready</span>
     </div>
     <div class="controls">
-      <select id="layerType">
-        <option value="koppen">Köppen Climate</option>
-        <option value="precip">Annual Precip Avg</option>
-      </select>
       <select id="units">
         <option value="metric">Metric (°C/mm)</option>
         <option value="imperial" selected>Imperial (°F/in)</option>
@@ -129,19 +125,65 @@
       maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     }).addTo(map);
 
-    const precipLayer = L.tileLayer('tiles_precip/{z}/{x}/{y}.png', {
+    let precipLayer = L.tileLayer('tiles_precip/12/{z}/{x}/{y}.png', {
       maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     });
 
-    document.getElementById('layerType').addEventListener('change', (e) => {
-      if (e.target.value === 'precip') {
-        map.removeLayer(koppenLayer); map.addLayer(precipLayer);
-        document.getElementById('status').innerText = "Static Precipitation DB Active";
-      } else {
-        map.removeLayer(precipLayer); map.addLayer(koppenLayer);
-        document.getElementById('status').innerText = "Static Köppen DB Active";
-      }
+    let tempLayer = L.tileLayer('tiles_temp/12/{z}/{x}/{y}.png', {
+      maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     });
+
+    let currentMonth = "12"; // Default to annual
+    let currentLayerType = 'koppen';
+    
+    function updateLayers() {
+      const lType = currentLayerType;
+      const m = currentMonth;
+      
+      map.removeLayer(koppenLayer);
+      map.removeLayer(precipLayer);
+      map.removeLayer(tempLayer);
+      
+      if (lType === 'koppen') {
+        map.addLayer(koppenLayer);
+        document.getElementById('status').innerText = "Static Köppen DB Active";
+      } else if (lType === 'precip') {
+        precipLayer.setUrl(`tiles_precip/${m}/{z}/{x}/{y}.png`);
+        map.addLayer(precipLayer);
+        const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+        document.getElementById('status').innerText = `Static Precipitation DB Active (${monthText})`;
+      } else if (lType === 'temp') {
+        tempLayer.setUrl(`tiles_temp/${m}/{z}/{x}/{y}.png`);
+        map.addLayer(tempLayer);
+        const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+        document.getElementById('status').innerText = `Static Temperature DB Active (${monthText})`;
+      }
+    }
+
+    // Global helper for interactive tooltip
+    window.setLayer = (type, month) => {
+      if (type) currentLayerType = type;
+      if (month !== undefined) currentMonth = String(month);
+      updateLayers();
+    };
+
+    // No dropdown for month or layer type selection anymore.
+    // Selection is handled via the tooltip interactions.
+
+    // Scroll-to-change selection helper
+    function makeSelectScrollable(selectEl) {
+      selectEl.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 1 : -1;
+        let newIndex = selectEl.selectedIndex + delta;
+        if (newIndex >= 0 && newIndex < selectEl.options.length) {
+          selectEl.selectedIndex = newIndex;
+          selectEl.dispatchEvent(new Event('change'));
+        }
+      }, { passive: false });
+    }
+
+    makeSelectScrollable(document.getElementById('units'));
 
     document.getElementById('status').innerText = "Downloading Geographic DB...";
 
@@ -188,36 +230,38 @@
       const isMetric = unitType === 'metric';
 
       const totalPrecip = d.p.reduce((acc, curr) => acc + curr, 0);
-      const displayTotal = isMetric ? `${Math.round(totalPrecip)}mm` : `${(totalPrecip / 25.4).toFixed(1)}in`;
+      const avgTemp = d.t.reduce((acc, curr) => acc + curr, 0) / d.t.length;
 
       const html = `
         <div style="min-width: 320px;">
-          <div style="font-weight:700; color:#eee; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-weight:700; color:#eee; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; hover: opacity: 0.8;" onclick="setLayer('koppen')">
             <div style="display: flex; align-items: center;">
               <span style="background:${badgeColor}; color:#000; text-shadow: 0px 0px 2px rgba(255,255,255,0.5); padding:2px 6px; border-radius:3px; margin-right:8px;">${info[0]}</span>
               ${info[1]}
             </div>
-            <div style="font-size: 11px; color: #888;">Avg: ${displayTotal} / yr</div>
           </div>
           
           <table style="width:100%; font-size:11px; border-collapse:collapse; text-align:center; font-family: inherit;">
             <tr style="color:#aaa; border-bottom:1px solid #333;">
               <td style="text-align:left; font-weight:bold; padding:2px 0;"></td>
-              ${months.map(m => `<td>${m}</td>`).join('')}
+              ${months.map(m => `<td style="padding: 0 2px;">${m}</td>`).join('')}
+              <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px;">Year</td>
             </tr>
-            <tr>
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;">T°(${isMetric ? 'C' : 'F'})</td>
-              ${d.t.map(t => {
+            <tr style="cursor: pointer;">
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;" onclick="setLayer('temp', 12)">T°(${isMetric ? 'C' : 'F'})</td>
+              ${d.t.map((t, idx) => {
           const val = isMetric ? Math.round(t) : Math.round(t * 9 / 5 + 32);
-          return `<td style="color:${getTempColor(t)}; font-weight:bold;">${val}</td>`;
+          return `<td style="color:${getTempColor(t)}; font-weight:bold;" onclick="setLayer('temp', ${idx})">${val}</td>`;
         }).join('')}
+              <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px; color:${getTempColor(avgTemp)};" onclick="setLayer('temp', 12)">${isMetric ? Math.round(avgTemp) : Math.round(avgTemp * 9 / 5 + 32)}</td>
             </tr>
-            <tr>
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;">P(${isMetric ? 'mm' : 'in'})</td>
-              ${d.p.map(p => {
+            <tr style="cursor: pointer;">
+              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0; white-space: nowrap;" onclick="setLayer('precip', 12)">P(${isMetric ? 'mm' : 'in'})</td>
+              ${d.p.map((p, idx) => {
           const val = isMetric ? Math.round(p) : (p / 25.4).toFixed(1);
-          return `<td style="color:${getPrecipColor(p)}; font-weight:bold;">${val}</td>`;
+          return `<td style="color:${getPrecipColor(p / 2.5)}; font-weight:bold;" onclick="setLayer('precip', ${idx})">${val}</td>`;
         }).join('')}
+              <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px; color:${getPrecipColor(totalPrecip / 12)};" onclick="setLayer('precip', 12)">${isMetric ? Math.round(totalPrecip) : (totalPrecip / 25.4).toFixed(1)}</td>
             </tr>
           </table>
         </div>
