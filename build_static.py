@@ -64,47 +64,55 @@ for t in range(-40, 60):
     temp_lut[t + 40] = [int(r*255), int(g*255), int(b*255), 200]
 
 
-# 3. BUILD QUERY DATABASE (Sparse JSON of Land data at 0.5 degrees)
-print("Building Static Global Query Database...")
-# Load 0.5 degree data just for the JSON to keep it small
-ds_ens_05 = netCDF4.Dataset('Current data/climate_data_0p5/1991_2020/ensemble_mean_0p5.nc')
-t_05 = np.nan_to_num(ds_ens_05.variables['air_temperature'][:], 0)
-p_05 = np.nan_to_num(ds_ens_05.variables['precipitation'][:], 0)
+# 3. BUILD QUERY DATABASE (High Res Chunks at 0.1 degrees)
+print("Building High-Res Tiled Query Database (0.1 deg / 10km)...")
+ds_ens = netCDF4.Dataset('Current data/climate_data_0p1/1991_2020/ensemble_mean_0p1.nc')
+t_data = np.nan_to_num(ds_ens.variables['air_temperature'][:], 0)
+p_data = np.nan_to_num(ds_ens.variables['precipitation'][:], 0)
 
-lat_len = t_05.shape[1]
-lon_len = t_05.shape[2]
+lat_len, lon_len = t_data.shape[1], t_data.shape[2]
+# Using 10x10 degree chunks = 36x18 files
+# Each file covers 100x100 points
+CHUNK_SIZE = 10 # degrees
+tiles_dir = os.path.join(OUT_DIR, 'query_tiles')
+os.makedirs(tiles_dir, exist_ok=True)
 
-query_db = {}
-# Only export where precip is > 0 (land roughly)
-# To be safe, we check if the 1km master mask says land
-for y in range(lat_len):
-    for x in range(lon_len):
-        lat = 90 - (y * 180 / lat_len)
-        lon = (x * 360 / lon_len) - 180
+# Pre-calculate Köppen mapping to ensemble resolution
+# We map the 1km Köppen center onto the 0.1 degree grid
+for lat_chunk in range(-90, 90, CHUNK_SIZE):
+    for lon_chunk in range(-180, 180, CHUNK_SIZE):
+        chunk_db = {}
         
-        y_1km = min(int((90 - lat) / 180 * H), H - 1)
-        x_1km = min(int((lon + 180) / 360 * W), W - 1)
+        # Grid boundaries
+        y_start = int((90 - (lat_chunk + CHUNK_SIZE)) / 180 * lat_len)
+        y_end = int((90 - lat_chunk) / 180 * lat_len)
+        x_start = int((lon_chunk + 180) / 360 * lon_len)
+        x_end = int(((lon_chunk + CHUNK_SIZE) + 180) / 360 * lon_len)
         
-        kid = int(master_data[y_1km, x_1km])
+        for y in range(y_start, y_end):
+            for x in range(x_start, x_end):
+                lat = 90 - (y * 180 / lat_len + (180/lat_len)/2)
+                lon = (x * 360 / lon_len - 180 + (360/lon_len)/2)
+                
+                y_1km = min(int((90 - lat) / 180 * H), H - 1)
+                x_1km = min(int((lon + 180) / 360 * W) % W, W - 1)
+                
+                kid = int(master_data[y_1km, x_1km])
+                if kid > 0:
+                    chunk_db[f"{y}_{x}"] = {
+                        "i": kid,
+                        "t": [round(float(t_data[m, y, x]), 1) for m in range(12)],
+                        "p": [int(round(float(p_data[m, y, x]))) for m in range(12)]
+                    }
         
-        if kid > 0:  # Valid land
-            temps = [round(float(t_05[m, y, x]), 1) for m in range(12)]
-            precips = [int(round(float(p_05[m, y, x]))) for m in range(12)]
-            
-            # Key is tightly packed "y_x"
-            query_db[f"{y}_{x}"] = {
-                "i": kid,
-                "t": temps,
-                "p": precips
-            }
+        if chunk_db:
+            # Filename based on bottom-left corner
+            chunk_name = f"{lat_chunk}_{lon_chunk}.json"
+            with open(os.path.join(tiles_dir, chunk_name), 'w') as f:
+                json.dump(chunk_db, f, separators=(',', ':'))
 
-ds_ens_05.close()
-
-os.makedirs(OUT_DIR, exist_ok=True)
-with open(os.path.join(OUT_DIR, 'query_db.json'), 'w') as f:
-    json.dump(query_db, f, separators=(',', ':'))
-
-print(f"Query Database saved! Exported {len(query_db)} land coordinates.")
+ds_ens.close()
+print("High-Res Tiled Query Database saved!")
 
 
 # 4. TILE GENERATION FUNCTIONS
