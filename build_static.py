@@ -26,21 +26,22 @@ def init_worker(colors_dict):
     global _color_lut, _precip_lut, _temp_lut
     _color_lut = np.zeros((32, 4), dtype=np.uint8)
     for k, v in colors_dict.items():
-        _color_lut[k] = [v[0], v[1], v[2], 200]
+        _color_lut[k] = [v[0], v[1], v[2], 255]
+    _color_lut[0] = [0, 0, 0, 0]
 
     _precip_lut = np.zeros((501, 4), dtype=np.uint8)
     for p in range(501):
         curve = (p / 500) ** 0.7
         hue = (270 * curve) / 360.0 
         r, g, b = colorsys.hls_to_rgb(hue, 0.65, 1.0)
-        _precip_lut[p] = [int(r*255), int(g*255), int(b*255), 200]
+        _precip_lut[p] = [int(r*255), int(g*255), int(b*255), 255]
 
     _temp_lut = np.zeros((100, 4), dtype=np.uint8)
     for t in range(-40, 60):
         clamped = max(-30, min(30, t))
         hue = 270 * (1 - (clamped + 30) / 60)
         r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.65, 1.0)
-        _temp_lut[t + 40] = [int(r*255), int(g*255), int(b*255), 200]
+        _temp_lut[t + 40] = [int(r*255), int(g*255), int(b*255), 255]
 
 def fill_missing(data, invalid=None):
     # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points
@@ -211,12 +212,12 @@ if __name__ == "__main__":
         all_tasks.extend([(z, x, y, era, ens_path, k_path) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)])
 
     print(f"Processing {len(all_tasks)} tile groups...")
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=init_worker, initargs=(COLORS,)) as executor:
-        futures = {executor.submit(process_tile_task, t): t for t in all_tasks}
+    with multiprocessing.Pool(processes=MAX_WORKERS, initializer=init_worker, initargs=(COLORS,)) as pool:
         count = 0
-        for future in as_completed(futures):
+        total_tasks = len(all_tasks)
+        for _ in pool.imap_unordered(process_tile_task, all_tasks):
             count += 1
             if count % 1000 == 0:
-                print(f"Done: {count}/{len(all_tasks)}")
+                print(f"Done: {count}/{total_tasks}", flush=True)
 
     print("\nCOMPILE COMPLETE!")

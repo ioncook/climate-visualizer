@@ -32,7 +32,7 @@ def _init_lut():
         elif 240 <= hue < 300: r,g,b = x,0,c
         else: r,g,b = c,0,x
         
-        _color_lut[m] = [int(r*255), int(g*255), int(b*255), 200]
+        _color_lut[m] = [int(r*255), int(g*255), int(b*255), 255]
 
 def fill_missing(data, invalid=None):
     # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points

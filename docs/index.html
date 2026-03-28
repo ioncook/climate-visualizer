@@ -128,6 +128,52 @@
       border: 1px solid #444;
     }
 
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    .setting-row select,
+    .setting-row input {
+      background: #333;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 3px;
+      padding: 2px 5px;
+      outline: none;
+    }
+
+    /* Theme-fitting range slider */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      padding: 0;
+      border: none;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 4px;
+      background: #444;
+      border-radius: 2px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 12px;
+      width: 12px;
+      border-radius: 50%;
+      background: #aaa;
+      cursor: pointer;
+      margin-top: -4px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    input[type=range]:hover::-webkit-slider-thumb {
+      background: #fff;
+    }
+
     .leaflet-tile {
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
@@ -182,13 +228,20 @@
             <option value="light">Clean Light Map</option>
             <option value="osm">Open Street Map</option>
             <option value="satellite">Satellite</option>
+            <option value="none">None (Plain Black)</option>
           </select>
           <hr style="border:0; border-top: 1px solid #333; margin: 8px 0;">
-          <label style="font-size: 11px; color:#aaa; margin-bottom: 4px;">Units</label>
-          <select id="units" style="width:100%;">
-            <option value="metric">Metric (°C/mm)</option>
-            <option value="imperial" selected>Imperial (°F/in)</option>
-          </select>
+          <div class="setting-row">
+            <span>Units</span>
+            <select id="units">
+              <option value="imperial">Imperial (°F, in)</option>
+              <option value="metric">Metric (°C, mm)</option>
+            </select>
+          </div>
+          <div class="setting-row" id="opacity-row">
+            <span>Layer Opacity</span>
+            <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
+          </div>
         </div>
       </div>
     </div>
@@ -243,16 +296,26 @@
 
     let currentBasemapLayer = BASEMAPS.dark.addTo(map);
 
-    const eraSelect = document.getElementById('era');
-    const compareSelect = document.getElementById('compare');
     const basemapSelect = document.getElementById('basemap');
     const unitsSelect = document.getElementById('units');
+    const opacitySlider = document.getElementById('layer-opacity');
+    const eraSelect = document.getElementById('era');
+    const compareSelect = document.getElementById('compare');
+
+
 
     basemapSelect.addEventListener('change', (e) => {
-      map.removeLayer(currentBasemapLayer);
-      currentBasemapLayer = BASEMAPS[e.target.value];
-      currentBasemapLayer.addTo(map);
-      updateLayers(); // updateLayers handles layer opacity and state
+      if (currentBasemapLayer) map.removeLayer(currentBasemapLayer);
+      
+      const selected = basemapSelect.value;
+      localStorage.setItem('climate_basemap', selected);
+      if (selected !== 'none') {
+        currentBasemapLayer = BASEMAPS[selected];
+        currentBasemapLayer.addTo(map);
+      } else {
+        currentBasemapLayer = null;
+      }
+      updateLayers();
     });
 
     // STATIC PRE-GENERATED CHUNKS (Relative to selected Era)
@@ -268,6 +331,10 @@
     let maxPrecipLayer = L.tileLayer("");
     let minPrecipLayer = L.tileLayer("");
 
+    function isCompareMode() {
+      return compareSelect.value !== 'none' && eraSelect.value !== compareSelect.value && (currentMonth === "12" || currentLayerType === 'koppen');
+    }
+
     function updateLayers() {
       const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
       let era1 = currentEra;
@@ -281,7 +348,7 @@
       const lType = currentLayerType;
       const m = currentMonth;
 
-      const isCompare = era2 !== 'none' && era1 !== era2 && (m === "12" || lType === 'koppen');
+      const isCompare = isCompareMode();
       const tilePrefix = isCompare ? `compare/${era1}_${era2}` : currentEra;
 
       map.removeLayer(koppenLayer);
@@ -290,34 +357,26 @@
       map.removeLayer(maxPrecipLayer);
       map.removeLayer(minPrecipLayer);
 
+      const op = opacitySlider.value / 100;
+
       // Re-create layers for the correct Era to ensure full refresh
-      koppenLayer = L.tileLayer(`${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
+      koppenLayer = L.tileLayer(`${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png?v=2`, {
+        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
       });
-      precipLayer = L.tileLayer(`${tilePrefix}/tiles_precip/${m}/{z}/{x}/{y}.png`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
+      precipLayer = L.tileLayer(`${tilePrefix}/tiles_precip/${m}/{z}/{x}/{y}.png?v=2`, {
+        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
       });
-      tempLayer = L.tileLayer(`${tilePrefix}/tiles_temp/${m}/{z}/{x}/{y}.png`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
+      tempLayer = L.tileLayer(`${tilePrefix}/tiles_temp/${m}/{z}/{x}/{y}.png?v=2`, {
+        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
       });
 
       // Special extreme layers (only for 1991_2020)
-      maxPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_max/{z}/{x}/{y}.png`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
+      maxPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_max/{z}/{x}/{y}.png?v=2`, {
+        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
       });
-      minPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_min/{z}/{x}/{y}.png`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
+      minPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_min/{z}/{x}/{y}.png?v=2`, {
+        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
       });
-
-      // Maintain opacity logic
-      const basemap = basemapSelect.value;
-      const hiOpacity = ['topo', 'physical', 'light', 'osm', 'satellite'].includes(basemap);
-      const op = hiOpacity ? 0.9 : 0.7;
-      koppenLayer.setOpacity(op);
-      precipLayer.setOpacity(op);
-      tempLayer.setOpacity(op);
-      maxPrecipLayer.setOpacity(op);
-      minPrecipLayer.setOpacity(op);
 
       const mText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
 
@@ -422,6 +481,30 @@
       }
     }
 
+    unitsSelect.addEventListener('change', () => {
+      localStorage.setItem('climate_units', unitsSelect.value);
+      updateLayers();
+      maybeRefresh();
+      updateLegend(currentLayerType, isCompareMode());
+    });
+
+    opacitySlider.addEventListener('input', () => {
+      const op = opacitySlider.value / 100;
+      localStorage.setItem('climate_opacity', opacitySlider.value);
+      if (koppenLayer) koppenLayer.setOpacity(op);
+      if (precipLayer) precipLayer.setOpacity(op);
+      if (tempLayer) tempLayer.setOpacity(op);
+      if (maxPrecipLayer) maxPrecipLayer.setOpacity(op);
+      if (minPrecipLayer) minPrecipLayer.setOpacity(op);
+    });
+
+    document.getElementById('opacity-row').addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -5 : 5;
+      opacitySlider.value = Math.min(100, Math.max(0, parseInt(opacitySlider.value) + delta));
+      opacitySlider.dispatchEvent(new Event('input'));
+    });
+
     eraSelect.addEventListener('change', () => {
       currentEra = eraSelect.value;
       updateLayers();
@@ -451,17 +534,30 @@
       updateLayers(); // Updates legend content
     });
 
+    // LOAD SAVED SETTINGS
+    (function loadStoredSettings() {
+      const storedBasemap = localStorage.getItem('climate_basemap');
+      const storedUnits = localStorage.getItem('climate_units');
+      const storedOpacity = localStorage.getItem('climate_opacity');
+
+      if (storedBasemap) {
+        basemapSelect.value = storedBasemap;
+        basemapSelect.dispatchEvent(new Event('change'));
+      }
+      if (storedUnits) {
+        unitsSelect.value = storedUnits;
+        unitsSelect.dispatchEvent(new Event('change'));
+      }
+      if (storedOpacity) {
+        opacitySlider.value = storedOpacity;
+        opacitySlider.dispatchEvent(new Event('input'));
+      }
+    })();
+
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
-      const isSameType = (type === currentLayerType);
-      const isSameMonth = (month === undefined || String(month) === currentMonth);
-
-      if (isSameType && isSameMonth) {
-        currentLayerType = 'none';
-      } else {
-        if (type) currentLayerType = type;
-        if (month !== undefined) currentMonth = String(month);
-      }
+      if (type) currentLayerType = type;
+      if (month !== undefined) currentMonth = String(month);
       updateLayers();
     };
 

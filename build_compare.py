@@ -39,13 +39,13 @@ def _init_luts():
     global _k_lut
     _k_lut = np.zeros((61, 4), dtype=np.uint8)  # max diff is +-30 -> offset by 30
     lut = {
-        0: [0, 255, 0, 200],      # green
-        -1: [255, 255, 0, 200],   # yellow
-        -2: [255, 128, 0, 200],   # orange
-        -3: [255, 0, 0, 200],     # red
-        1: [0, 255, 255, 200],    # cyan
-        2: [0, 0, 255, 200],      # blue
-        3: [128, 0, 255, 200]     # violet
+        0: [0, 255, 0, 255],      # green
+        -1: [255, 255, 0, 255],   # yellow
+        -2: [255, 128, 0, 255],   # orange
+        -3: [255, 0, 0, 255],     # red
+        1: [0, 255, 255, 255],    # cyan
+        2: [0, 0, 255, 255],      # blue
+        3: [128, 0, 255, 255]     # violet
     }
     for diff in range(-30, 31):
         idx = diff + 30
@@ -82,7 +82,7 @@ def _hsl_array_to_rgba(H_deg, void_mask, water_mask):
         (R_f * 255).astype(np.uint8),
         (G_f * 255).astype(np.uint8),
         (B_f * 255).astype(np.uint8),
-        np.full(H.shape, 200, dtype=np.uint8)
+        np.full(H.shape, 255, dtype=np.uint8)
     ], axis=-1)
     arr[void_mask] = [0, 0, 0, 0]
     arr[water_mask] = [0, 0, 0, 0]
@@ -230,12 +230,16 @@ if __name__ == "__main__":
                     for y in range(2**z):
                         all_tasks.append((z, x, y, era1, era2))
     
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=_init_worker) as executor:
-        futures = {executor.submit(process_compare_task, t): t for t in all_tasks}
+    def _init_worker():
+        _init_luts()
+
+    with multiprocessing.Pool(processes=MAX_WORKERS, initializer=_init_worker) as pool:
         count = 0
-        for f in as_completed(futures):
+        total_tasks = len(all_tasks)
+        for _ in pool.imap_unordered(process_compare_task, all_tasks):
             count += 1
             if count % 1000 == 0:
-                print(f"Done: {count}/{len(all_tasks)}")
+                print(f"Done: {count}/{total_tasks}", flush=True)
+                # Suggest GC periodically if needed, though Pool workers handle their own memory
     
-    print("ALL COMPARISONS DONE")
+    print("\nALL COMPARISONS DONE")
