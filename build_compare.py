@@ -8,6 +8,7 @@ import colorsys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import gc
+from scipy import ndimage
 
 # Config
 Z_MAX = 6
@@ -17,6 +18,18 @@ MAX_WORKERS = 1
 
 _era_data_cache = {}
 _k_lut = None
+
+def fill_missing(data, invalid=None):
+    # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points
+    if invalid is None:
+        invalid = (data == 0) | np.isnan(data)
+    else:
+        # Augment the mask with zero-check to catch shoreline artifacts
+        invalid = invalid | (data == 0)
+        
+    if not np.any(invalid): return data
+    ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+    return data[tuple(ind)]
 
 # Köppen diff mapping (ROYGBIV)
 # We want: 
@@ -117,8 +130,16 @@ def get_era_data(era_name):
         ds_k = netCDF4.Dataset(f'All data/koppen_geiger_nc/{era_name}/koppen_geiger_0p00833333.nc')
         v_k = [v for v in ds_k.variables.keys() if 'kg_class' in v.lower()][0]
         
-        t = np.nan_to_num(ds.variables['air_temperature'][:], 0)
-        p = np.nan_to_num(ds.variables['precipitation'][:], 0)
+        v_t = ds.variables['air_temperature']
+        v_p = ds.variables['precipitation']
+        t = np.nan_to_num(v_t[:], 0)
+        p = np.nan_to_num(v_p[:], 0)
+
+        # Extrapolate data into ocean for cleaner masking at the coastline
+        for i in range(12):
+            t[i] = fill_missing(t[i], v_t[i].mask if hasattr(v_t, 'mask') else None)
+            p[i] = fill_missing(p[i], v_p[i].mask if hasattr(v_p, 'mask') else None)
+
         k = np.nan_to_num(ds_k.variables[v_k][:], 0).astype(np.int8)
         
         _era_data_cache[era_name] = {

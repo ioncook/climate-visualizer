@@ -8,6 +8,7 @@ import colorsys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import gc
+from scipy import ndimage
 
 # --- CONFIG ---
 Z_MAX = 6
@@ -41,6 +42,19 @@ def init_worker(colors_dict):
         r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.65, 1.0)
         _temp_lut[t + 40] = [int(r*255), int(g*255), int(b*255), 200]
 
+def fill_missing(data, invalid=None):
+    # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points
+    # We treat absolute 0 as invalid to catch shoreline artifacts where mask data is missing
+    if invalid is None:
+        invalid = (data == 0) | np.isnan(data)
+    else:
+        # Augment the mask with zero-check to catch source artifacts
+        invalid = invalid | (data == 0)
+        
+    if not np.any(invalid): return data
+    ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+    return data[tuple(ind)]
+
 def _gen_arrays(z, x, y):
     num_tiles = 2 ** z
     map_size = 256 * num_tiles
@@ -63,8 +77,16 @@ def process_tile_task(args):
         
         # Load Ensemble
         ds_e = netCDF4.Dataset(ensemble_path)
-        t = np.nan_to_num(ds_e.variables['air_temperature'][:], 0)
-        p = np.nan_to_num(ds_e.variables['precipitation'][:], 0)
+        v_t = ds_e.variables['air_temperature']
+        v_p = ds_e.variables['precipitation']
+        t = np.nan_to_num(v_t[:], 0)
+        p = np.nan_to_num(v_p[:], 0)
+        
+        # Extrapolate data into ocean for cleaner masking at the coastline
+        for m in range(t.shape[0]):
+            t[m] = fill_missing(t[m], v_t[m].mask if hasattr(v_t, 'mask') else None)
+            p[m] = fill_missing(p[m], v_p[m].mask if hasattr(v_p, 'mask') else None)
+            
         ds_e.close()
         
         # Load Era-Specific Köppen

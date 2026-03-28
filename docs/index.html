@@ -23,7 +23,7 @@
     .header-bar {
       background: #121212;
       border-bottom: 1px solid #333;
-      padding: 10px 20px;
+      padding: 10px 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -50,6 +50,70 @@
       border-radius: 4px;
       cursor: pointer;
       font-family: inherit;
+    }
+
+    .settings-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .settings-content {
+      display: none;
+      position: absolute;
+      right: 2px;
+      top: 45px;
+      background-color: #1a1a1a;
+      min-width: 200px;
+      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
+      z-index: 1001;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 12px;
+    }
+
+    .settings-content.show {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .legend-container {
+      position: absolute;
+      bottom: 25px;
+      left: 20px;
+      z-index: 1000;
+      color: white;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+    }
+
+    #layer-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .legend-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .gradient-bar {
+      height: 6px;
+      width: 250px;
+      border-radius: 3px;
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 250px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #ccc;
     }
 
     .leaflet-popup-content-wrapper {
@@ -97,22 +161,47 @@
         <option value="1961_1990">1961-1990 Averages</option>
         <option value="1991_2020">1991-2020 Averages</option>
       </select>
-      <select id="basemap">
-        <option value="dark">Dark Matter</option>
-        <option value="topo">Topography</option>
-        <option value="physical">Physical Map</option>
-        <option value="light">Clean Light Map</option>
-        <option value="osm">Open Street Map</option>
-        <option value="satellite">Satellite</option>
-      </select>
-      <select id="units">
-        <option value="metric">Metric (°C/mm)</option>
-        <option value="imperial" selected>Imperial (°F/in)</option>
-      </select>
+      <div class="settings-dropdown">
+        <button id="settings-btn"
+          style="background:none; border:none; display:flex; align-items:center; padding: 0 10px; cursor:pointer;"
+          onclick="toggleSettings(event)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
+          </svg>
+        </button>
+        <div id="settings-menu" class="settings-content">
+          <label style="font-size: 11px; color:#aaa; margin-bottom: 4px;">Basemap</label>
+          <select id="basemap" style="width:100%;">
+            <option value="dark">Dark Matter</option>
+            <option value="topo">Topography</option>
+            <option value="physical">Physical Map</option>
+            <option value="light">Clean Light Map</option>
+            <option value="osm">Open Street Map</option>
+            <option value="satellite">Satellite</option>
+          </select>
+          <hr style="border:0; border-top: 1px solid #333; margin: 8px 0;">
+          <label style="font-size: 11px; color:#aaa; margin-bottom: 4px;">Units</label>
+          <select id="units" style="width:100%;">
+            <option value="metric">Metric (°C/mm)</option>
+            <option value="imperial" selected>Imperial (°F/in)</option>
+          </select>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div id="map"></div>
+  <div id="map">
+    <div class="legend-container">
+      <div id="layer-title">Köppen Classification</div>
+      <div id="legend-content" class="legend-bar">
+        <!-- Dynamic Legend Injection -->
+      </div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -129,15 +218,15 @@
     };
 
     const LEGENDS = {
-      1: ["Af", "Tropical rainforest"], 2: ["Am", "Tropical monsoon"], 3: ["Aw", "Tropical savannah"],
-      4: ["BWh", "Arid desert, hot"], 5: ["BWk", "Arid desert, cold"], 6: ["BSh", "Arid steppe, hot"], 7: ["BSk", "Arid steppe, cold"],
+      1: ["Af", "Tropical rainforest"], 2: ["Am", "Tropical monsoon"], 3: ["Aw", "Tropical savanna"],
+      4: ["BWh", "Arid desert, hot"], 5: ["BWk", "Arid desert, cold"], 6: ["BSh", "Semi-arid, hot"], 7: ["BSk", "Semi-arid, cold"],
       8: ["Csa", "Temperate, dry summer, hot summer"], 9: ["Csb", "Temperate, dry summer, warm summer"], 10: ["Csc", "Temperate, dry summer, cold summer"],
       11: ["Cwa", "Temperate, dry winter, hot summer"], 12: ["Cwb", "Temperate, dry winter, warm summer"], 13: ["Cwc", "Temperate, dry winter, cold summer"],
       14: ["Cfa", "Temperate, no dry season, hot summer"], 15: ["Cfb", "Temperate, no dry season, warm summer"], 16: ["Cfc", "Temperate, no dry season, cold summer"],
       17: ["Dsa", "Cold, dry summer, hot summer"], 18: ["Dsb", "Cold, dry summer, warm summer"], 19: ["Dsc", "Cold, dry summer, cold summer"], 20: ["Dsd", "Cold, dry summer, very cold winter"],
       21: ["Dwa", "Cold, dry winter, hot summer"], 22: ["Dwb", "Cold, dry winter, warm summer"], 23: ["Dwc", "Cold, dry winter, cold summer"], 24: ["Dwd", "Cold, dry winter, very cold winter"],
       25: ["Dfa", "Cold, no dry season, hot summer"], 26: ["Dfb", "Cold, no dry season, warm summer"], 27: ["Dfc", "Cold, no dry season, cold summer"], 28: ["Dfd", "Cold, no dry season, very cold winter"],
-      29: ["ET", "Polar tundra"], 30: ["EF", "Polar frost"]
+      29: ["ET", "Polar tundra / Highland"], 30: ["EF", "Polar frost / Ice cap"]
     };
 
     const map = L.map('map', { center: [20, 0], zoom: 3, zoomSnap: 0, wheelPxPerZoomLevel: 50, zoomControl: false });
@@ -192,7 +281,7 @@
       const lType = currentLayerType;
       const m = currentMonth;
 
-      const isCompare = era2 !== 'none' && era1 !== era2 && m === "12";
+      const isCompare = era2 !== 'none' && era1 !== era2 && (m === "12" || lType === 'koppen');
       const tilePrefix = isCompare ? `compare/${era1}_${era2}` : currentEra;
 
       map.removeLayer(koppenLayer);
@@ -221,7 +310,7 @@
       });
 
       // Maintain opacity logic
-      const basemap = document.getElementById('basemap').value;
+      const basemap = basemapSelect.value;
       const hiOpacity = ['topo', 'physical', 'light', 'osm', 'satellite'].includes(basemap);
       const op = hiOpacity ? 0.9 : 0.7;
       koppenLayer.setOpacity(op);
@@ -230,25 +319,91 @@
       maxPrecipLayer.setOpacity(op);
       minPrecipLayer.setOpacity(op);
 
+      const mText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+
       if (lType === 'none') {
-        document.getElementById('status').innerText = "Overlays Disabled";
+        document.getElementById('status').innerText = "Click map for data";
+        updateLegend('none');
       } else if (lType === 'koppen') {
         map.addLayer(koppenLayer);
         document.getElementById('status').innerText = isCompare ? `Köppen Change [${era1} vs ${era2}]` : `Köppen DB Active [${currentEra}]`;
+        updateLegend('koppen', isCompare);
       } else if (lType === 'precip') {
         map.addLayer(precipLayer);
-        const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
-        document.getElementById('status').innerText = isCompare ? `Precipitation Change [${era1} vs ${era2}]` : `Precipitation Active (${monthText}) [${currentEra}]`;
+        document.getElementById('status').innerText = isCompare ? `Precipitation Change [${era1} vs ${era2}]` : `Precipitation Active (${mText}) [${currentEra}]`;
+        updateLegend('precip', isCompare);
       } else if (lType === 'temp') {
         map.addLayer(tempLayer);
-        const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
-        document.getElementById('status').innerText = isCompare ? `Temperature Change [${era1} vs ${era2}]` : `Temperature Active (${monthText}) [${currentEra}]`;
+        document.getElementById('status').innerText = isCompare ? `Temperature Change [${era1} vs ${era2}]` : `Temperature Active (${mText}) [${currentEra}]`;
+        updateLegend('temp', isCompare);
       } else if (lType === 'precip_max') {
         map.addLayer(maxPrecipLayer);
         document.getElementById('status').innerText = "Month of Greatest Precipitation [1991-2020]";
+        updateLegend('precip_max');
       } else if (lType === 'precip_min') {
         map.addLayer(minPrecipLayer);
         document.getElementById('status').innerText = "Month of Least Precipitation [1991-2020]";
+        updateLegend('precip_min');
+      }
+    }
+
+    function updateLegend(type, isCompare) {
+      const titleEl = document.getElementById('layer-title');
+      const contentEl = document.getElementById('legend-content');
+      const isMetric = unitsSelect.value === 'metric';
+      const mText = currentMonth === "12" ? "Annual" : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][currentMonth];
+
+      if (type === 'none') {
+        titleEl.innerText = "";
+        contentEl.innerHTML = "";
+        return;
+      }
+
+      if (type === 'koppen') {
+        titleEl.innerText = isCompare ? "Köppen Category Shift" : "Köppen-Geiger Class";
+        if (isCompare) {
+          contentEl.innerHTML = `
+            <div class="gradient-bar" style="background: linear-gradient(to right, #8000ff, #0000ff, #00ffff, #00ff00, #ffff00, #ff8000, #ff0000);"></div>
+            <div class="legend-labels"><span>Cooler Shift</span><span>Same</span><span>Warmer Shift</span></div>
+          `;
+        } else {
+          contentEl.innerHTML = `<div style="font-size:10px; color:#888;">Color indicates climate zone classification</div>`;
+        }
+      } else if (type === 'temp') {
+        titleEl.innerText = isCompare ? "Temperature Change" : `${mText} Average Temperature`;
+        if (isCompare) {
+          contentEl.innerHTML = `
+            <div class="gradient-bar" style="background: linear-gradient(to right, #0000ff, #00ff00, #ff0000);"></div>
+            <div class="legend-labels"><span>Cooler</span><span>Stable</span><span>Warmer</span></div>
+          `;
+        } else {
+          const tMin = isMetric ? "-30°C" : "-22°F";
+          const tMax = isMetric ? "30°C" : "86°F";
+          contentEl.innerHTML = `
+            <div class="gradient-bar" style="background: linear-gradient(to right, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);"></div>
+            <div class="legend-labels"><span>${tMin}</span><span>0°</span><span>${tMax}</span></div>
+          `;
+        }
+      } else if (type === 'precip') {
+        titleEl.innerText = isCompare ? "Precipitation Change" : `${mText} Average Precipitation`;
+        if (isCompare) {
+          contentEl.innerHTML = `
+            <div class="gradient-bar" style="background: linear-gradient(to right, #ff0000, #00ff00, #0000ff);"></div>
+            <div class="legend-labels"><span>Drier</span><span>Stable</span><span>Wetter</span></div>
+          `;
+        } else {
+          const pMax = isMetric ? "500mm" : "20in";
+          contentEl.innerHTML = `
+            <div class="gradient-bar" style="background: linear-gradient(to right, #fff, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00);"></div>
+            <div class="legend-labels"><span>0</span><span>${pMax}</span></div>
+          `;
+        }
+      } else if (type === 'precip_max' || type === 'precip_min') {
+        titleEl.innerText = type === 'precip_max' ? "Wettest Month" : "Driest Month";
+        contentEl.innerHTML = `
+          <div class="gradient-bar" style="background: linear-gradient(to right, #800080, #0000ff, #00ff00, #ffff00, #ff0000);"></div>
+          <div class="legend-labels"><span>Jan</span><span>Jul</span><span>Dec</span></div>
+        `;
       }
     }
 
@@ -271,11 +426,27 @@
       maybeRefresh();
     });
 
-    [compareSelect, unitsSelect].forEach(el => {
-      el.addEventListener('change', () => {
-        updateLayers();
-        maybeRefresh();
-      });
+    compareSelect.addEventListener('change', () => {
+      updateLayers();
+      maybeRefresh();
+    });
+
+    window.toggleSettings = (e) => {
+      e.stopPropagation();
+      document.getElementById('settings-menu').classList.toggle('show');
+    };
+
+    window.addEventListener('click', () => {
+      document.getElementById('settings-menu').classList.remove('show');
+    });
+
+    document.getElementById('settings-menu').addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    unitsSelect.addEventListener('change', () => {
+      if (isPopupOpen) updatePopup();
+      updateLayers(); // Updates legend content
     });
 
     // Global helper for interactive tooltip
@@ -434,15 +605,15 @@
         }).join('')}
               <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px;">Year</td>
             </tr>
-            <tr style="cursor: pointer;" onclick="setLayer('temp')">
+            <tr style="cursor: pointer;" onclick="setLayer('temp', 12)">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">T°</td>
               ${d1.t.map((t, i) => `<td style="color:${getTempColor(t)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('temp', ${i})">${isMetric ? Math.round(t) : Math.round(t * 1.8 + 32)}</td>`).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; color:${getTempColor(avgT1)};">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
+              <td style="border-left: 1px solid #444; font-weight: bold; color:${getTempColor(avgT1)};" onclick="event.stopPropagation(); setLayer('temp', 12)">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
             </tr>
-            <tr style="cursor: pointer;" onclick="setLayer('precip')">
+            <tr style="cursor: pointer;" onclick="setLayer('precip', 12)">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">P</td>
               ${d1.p.map((p, i) => `<td style="color:${getPrecipColor(p / 2.5)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('precip', ${i})">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; color:${getPrecipColor(totalP1 / 12)};">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
+              <td style="border-left: 1px solid #444; font-weight: bold; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
             </tr>
           </table>
         `;

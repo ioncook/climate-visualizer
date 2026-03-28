@@ -4,6 +4,7 @@ import netCDF4
 from PIL import Image
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import gc
+from scipy import ndimage
 
 # Config
 Z_MAX = 6
@@ -33,6 +34,18 @@ def _init_lut():
         
         _color_lut[m] = [int(r*255), int(g*255), int(b*255), 200]
 
+def fill_missing(data, invalid=None):
+    # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points
+    if invalid is None:
+        invalid = (data == 0) | np.isnan(data)
+    else:
+        # Augment the mask with zero-check to catch shoreline artifacts
+        invalid = invalid | (data == 0)
+        
+    if not np.any(invalid): return data
+    ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+    return data[tuple(ind)]
+
 def _init_worker():
     _init_lut()
 
@@ -56,7 +69,10 @@ def process_extreme_task(args):
         k_path = f'All data/koppen_geiger_nc/{ERA}/koppen_geiger_0p00833333.nc'
         
         ds = netCDF4.Dataset(ens_path)
-        p = np.nan_to_num(ds.variables['precipitation'][:12], 0) # Only monthly
+        v_p = ds.variables['precipitation']
+        p = np.nan_to_num(v_p[:12], 0) # Only monthly
+        for m in range(p.shape[0]):
+            p[m] = fill_missing(p[m], v_p[m].mask if hasattr(v_p, 'mask') else None)
         ds.close()
         
         ds_k = netCDF4.Dataset(k_path)
