@@ -1,4 +1,5 @@
 1991-2020 set view:
+
 ![Modern view](./screenshots/modern_view.png)
 
 - Click the tooltip header to toggle koppen view
@@ -8,13 +9,15 @@
 - Click a monthly figure to see the monthly temperature or precipitation layer
 
 Historical set view:
+
 ![Historical view](./screenshots/historical_view.png)
 
 - Select by choosing a historical set in the left dropdown
 - Same Köppen layer as modern view, monthly chart is removed and only the average/total is shown
 
 Comparison view:
-![Comparison view](./screenshots/comparison_view.png)
+
+![Comparison view](./screenshots/compare_view.png)
 
 - Select by choosing a different set in the right dropdown
 - Click the header to show change in Köppen zones
