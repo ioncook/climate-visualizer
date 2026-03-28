@@ -83,6 +83,12 @@
         Source</a>
     </div>
     <div class="controls">
+      <select id="era">
+        <option value="1901_1930">1901-1930 Era</option>
+        <option value="1931_1960">1931-1960 Era</option>
+        <option value="1961_1990">1961-1990 Era</option>
+        <option value="1991_2020" selected>1991-2020 Era</option>
+      </select>
       <select id="basemap">
         <option value="dark">Dark Matter</option>
         <option value="topo">Topography</option>
@@ -159,16 +165,18 @@
       tempLayer.bringToFront();
     });
 
-    // STATIC PRE-GENERATED CHUNKS
-    const koppenLayer = L.tileLayer('tiles_koppen/{z}/{x}/{y}.png', {
+    // STATIC PRE-GENERATED CHUNKS (Relative to selected Era)
+    let currentEra = "1991_2020";
+
+    const koppenLayer = L.tileLayer(`${currentEra}/tiles_koppen/{z}/{x}/{y}.png`, {
       maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     }).addTo(map);
 
-    let precipLayer = L.tileLayer('tiles_precip/12/{z}/{x}/{y}.png', {
+    let precipLayer = L.tileLayer(`${currentEra}/tiles_precip/12/{z}/{x}/{y}.png`, {
       maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     });
 
-    let tempLayer = L.tileLayer('tiles_temp/12/{z}/{x}/{y}.png', {
+    let tempLayer = L.tileLayer(`${currentEra}/tiles_temp/12/{z}/{x}/{y}.png`, {
       maxNativeZoom: 6, maxZoom: 14, opacity: 0.7, tms: false
     });
 
@@ -176,6 +184,7 @@
     let currentLayerType = 'koppen';
 
     function updateLayers() {
+      const era = currentEra;
       const lType = currentLayerType;
       const m = currentMonth;
 
@@ -183,23 +192,32 @@
       map.removeLayer(precipLayer);
       map.removeLayer(tempLayer);
 
+      koppenLayer.setUrl(`${era}/tiles_koppen/{z}/{x}/{y}.png`);
+      precipLayer.setUrl(`${era}/tiles_precip/${m}/{z}/{x}/{y}.png`);
+      tempLayer.setUrl(`${era}/tiles_temp/${m}/{z}/{x}/{y}.png`);
+
       if (lType === 'none') {
         document.getElementById('status').innerText = "Overlays Disabled";
       } else if (lType === 'koppen') {
         map.addLayer(koppenLayer);
-        document.getElementById('status').innerText = "Static Köppen DB Active";
+        document.getElementById('status').innerText = `Köppen DB Active [${era}]`;
       } else if (lType === 'precip') {
-        precipLayer.setUrl(`tiles_precip/${m}/{z}/{x}/{y}.png`);
         map.addLayer(precipLayer);
         const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
-        document.getElementById('status').innerText = `Static Precipitation DB Active (${monthText})`;
+        document.getElementById('status').innerText = `Precipitation Active (${monthText}) [${era}]`;
       } else if (lType === 'temp') {
-        tempLayer.setUrl(`tiles_temp/${m}/{z}/{x}/{y}.png`);
         map.addLayer(tempLayer);
         const monthText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
-        document.getElementById('status').innerText = `Static Temperature DB Active (${monthText})`;
+        document.getElementById('status').innerText = `Temperature Active (${monthText}) [${era}]`;
       }
     }
+
+    const eraSelect = document.getElementById('era');
+    eraSelect.addEventListener('change', (e) => {
+      currentEra = e.target.value;
+      updateLayers();
+      if (lastQueryData && lastLatLng) updatePopup(); // Update popup if open
+    });
 
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
@@ -310,6 +328,7 @@
     const unitsSelect = document.getElementById('units');
     unitsSelect.addEventListener('change', updatePopup);
 
+    makeSelectScrollable(eraSelect);
     makeSelectScrollable(basemapSelect);
     makeSelectScrollable(unitsSelect);
 
@@ -320,12 +339,12 @@
       // Compute 10x10 degree grid id
       const latChunk = Math.floor(lat / 10) * 10;
       const lonChunk = Math.floor(lng / 10) * 10;
-      const chunkKey = `${latChunk}_${lonChunk}`;
+      const chunkKey = `${currentEra}_${latChunk}_${lonChunk}`;
 
       if (!queryCache[chunkKey]) {
         document.getElementById('status').innerText = `Loading Region [${chunkKey}]...`;
         try {
-          const res = await fetch(`query_tiles/${chunkKey}.json`);
+          const res = await fetch(`${currentEra}/query_tiles/${latChunk}_${lonChunk}.json`);
           if (!res.ok) throw new Error();
           queryCache[chunkKey] = await res.json();
           document.getElementById('status').innerText = "Regional Dataset Ready";
