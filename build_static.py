@@ -16,21 +16,13 @@ ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
 MAX_WORKERS = 2 # Strictly limited to 2 workers for memory stability
 
 # Global caches for workers
-_master_data = None
-_master_shape = None
 _color_lut = None
 _precip_lut = None
 _temp_lut = None
-_era_data = None # (t_data, p_data, mean_temp, mean_precip)
+_era_data = None # (t_data, p_data, mean_temp, mean_precip, master_data, master_shape)
 
-def init_worker(master_path, colors_dict):
-    global _master_data, _master_shape, _color_lut, _precip_lut, _temp_lut
-    ds = netCDF4.Dataset(master_path)
-    var_name = [v for v in ds.variables.keys() if 'kg_class' in v.lower()][0]
-    _master_data = np.nan_to_num(ds.variables[var_name][:], 0).astype(np.uint8)
-    _master_shape = _master_data.shape
-    ds.close()
-
+def init_worker(colors_dict):
+    global _color_lut, _precip_lut, _temp_lut
     _color_lut = np.zeros((32, 4), dtype=np.uint8)
     for k, v in colors_dict.items():
         _color_lut[k] = [v[0], v[1], v[2], 200]
@@ -61,35 +53,46 @@ def _gen_arrays(z, x, y):
     return lons, lats
 
 def process_tile_task(args):
-    z, x, y, era_name, ensemble_path = args
+    z, x, y, era_name, ensemble_path, koppen_path_data = args
     global _era_data
     
     # Load era data once per process per era
     if _era_data is None or _era_data['path'] != ensemble_path:
-        _era_data = None # Explicitly free old era data
+        _era_data = None 
         gc.collect()
-        ds = netCDF4.Dataset(ensemble_path)
-        t = np.nan_to_num(ds.variables['air_temperature'][:], 0)
-        p = np.nan_to_num(ds.variables['precipitation'][:], 0)
-        ds.close()
+        
+        # Load Ensemble
+        ds_e = netCDF4.Dataset(ensemble_path)
+        t = np.nan_to_num(ds_e.variables['air_temperature'][:], 0)
+        p = np.nan_to_num(ds_e.variables['precipitation'][:], 0)
+        ds_e.close()
+        
+        # Load Era-Specific Köppen
+        ds_k = netCDF4.Dataset(koppen_path_data)
+        v_k = [v for v in ds_k.variables.keys() if 'kg_class' in v.lower()][0]
+        m_k = np.nan_to_num(ds_k.variables[v_k][:], 0).astype(np.uint8)
+        m_s = m_k.shape
+        ds_k.close()
+
         _era_data = {
             'path': ensemble_path,
             't': t, 'p': p,
             'mT': np.mean(t, axis=0), 'mP': np.mean(p, axis=0),
-            'shape': (t.shape[1], t.shape[2])
+            'shape': (t.shape[1], t.shape[2]),
+            'master': m_k, 'm_shape': m_s
         }
         gc.collect()
 
     t_data, p_data = _era_data['t'], _era_data['p']
     mean_temp, mean_precip = _era_data['mT'], _era_data['mP']
+    master_data, master_shape = _era_data['master'], _era_data['m_shape']
     E_H, E_W = _era_data['shape']
-    H, W = _master_shape
+    H, W = master_shape
 
     era_dir = os.path.join(OUT_DIR, era_name)
-    koppen_path = os.path.join(era_dir, f'tiles_koppen/{z}/{x}/{y}.png')
+    koppen_tile_path = os.path.join(era_dir, f'tiles_koppen/{z}/{x}/{y}.png')
     
-    # KOPPEN
-    os.makedirs(os.path.dirname(koppen_path), exist_ok=True)
+    os.makedirs(os.path.dirname(koppen_tile_path), exist_ok=True)
     lons, lats = _gen_arrays(z, x, y)
     lon_idx = np.floor((lons + 180) / 360 * E_W).astype(int) % E_W
     lon_1km = np.floor((lons + 180) / 360 * W).astype(int) % W
@@ -102,14 +105,16 @@ def process_tile_task(args):
     LAT_VALID = (lat_idx_raw >= 0) & (lat_idx_raw < E_H)
     _, LAT_VALID_GRID = np.meshgrid(lon_idx, LAT_VALID)
     
-    water_mask = _master_data[LAT_1KM, LON_1KM] == 0
+    water_mask = master_data[LAT_1KM, LON_1KM] == 0
     void_mask = np.logical_not(LAT_VALID_GRID)
 
-    if not os.path.exists(koppen_path):
-        tile_classes = _master_data[LAT_1KM, LON_1KM]
+    # 1. KOPPEN
+    # NEVER skip here if we want to be sure, or just rely on manual deletion
+    if not os.path.exists(koppen_tile_path):
+        tile_classes = master_data[LAT_1KM, LON_1KM]
         img_k = _color_lut[tile_classes]
         img_k[void_mask] = [0, 0, 0, 0]
-        Image.fromarray(img_k, 'RGBA').save(koppen_path)
+        Image.fromarray(img_k, 'RGBA').save(koppen_tile_path)
 
     for m in range(13):
         p_p = os.path.join(era_dir, f'tiles_precip/{m}/{z}/{x}/{y}.png')
@@ -133,7 +138,6 @@ def process_tile_task(args):
 
 if __name__ == "__main__":
     print(f"Memory-Safe Multiprocess Builder (using {MAX_WORKERS} workers)")
-    master_path = f'All data/koppen_geiger_nc/1991_2020/koppen_geiger_0p00833333.nc'
     COLORS = {
         1: [0, 0, 255], 2: [0, 120, 255], 3: [70, 170, 250], 4: [255, 0, 0],
         5: [255, 150, 150], 6: [245, 165, 0], 7: [255, 220, 100], 8: [255, 255, 0],
@@ -149,17 +153,18 @@ if __name__ == "__main__":
     all_tasks = []
     for era in ERAS:
         ens_path = f'All data/climate_data_0p1/{era}/ensemble_mean_0p1.nc'
+        k_path = f'All data/koppen_geiger_nc/{era}/koppen_geiger_0p00833333.nc'
         q_dir = os.path.join(OUT_DIR, era, 'query_tiles')
         os.makedirs(q_dir, exist_ok=True)
         
-        # Build Query Tiles (Single threaded, essential for tooltips)
+        # Build Query Tiles
         if len(os.listdir(q_dir)) < 100:
             print(f"Building Query Tiles for {era}...")
             ds_e = netCDF4.Dataset(ens_path)
             t_d = np.nan_to_num(ds_e.variables['air_temperature'][:], 0)
             p_d = np.nan_to_num(ds_e.variables['precipitation'][:], 0)
             l_len, lon_len = t_d.shape[1], t_d.shape[2]
-            ds_m = netCDF4.Dataset(master_path)
+            ds_m = netCDF4.Dataset(k_path)
             m_v = [v for v in ds_m.variables.keys() if 'kg_class' in v.lower()][0]
             m_d = ds_m.variables[m_v][:]; H, W = m_d.shape
 
@@ -181,10 +186,10 @@ if __name__ == "__main__":
             ds_e.close(); ds_m.close()
 
         print(f"Adding Tile Tasks for Era: {era}")
-        all_tasks.extend([(z, x, y, era, ens_path) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)])
+        all_tasks.extend([(z, x, y, era, ens_path, k_path) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)])
 
     print(f"Processing {len(all_tasks)} tile groups...")
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=init_worker, initargs=(master_path, COLORS)) as executor:
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=init_worker, initargs=(COLORS,)) as executor:
         futures = {executor.submit(process_tile_task, t): t for t in all_tasks}
         count = 0
         for future in as_completed(futures):
