@@ -380,7 +380,7 @@
           const tMin = isMetric ? "-30°C" : "-22°F";
           const tMax = isMetric ? "30°C" : "86°F";
           contentEl.innerHTML = `
-            <div class="gradient-bar" style="background: linear-gradient(to right, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);"></div>
+            <div class="gradient-bar" style="background: linear-gradient(to right, #0000ff, #00ff00, #ff0000);"></div>
             <div class="legend-labels"><span>${tMin}</span><span>0°</span><span>${tMax}</span></div>
           `;
         }
@@ -392,16 +392,18 @@
             <div class="legend-labels"><span>Drier</span><span>Stable</span><span>Wetter</span></div>
           `;
         } else {
-          const pMax = isMetric ? "500mm" : "20in";
+          const isAnnual = currentMonth === "12";
+          const pMid = isMetric ? (isAnnual ? "1620mm" : "135mm") : (isAnnual ? "64in" : "5.3in");
+          const pMax = isMetric ? (isAnnual ? "6000mm" : "500mm") : (isAnnual ? "240in" : "20in");
           contentEl.innerHTML = `
-            <div class="gradient-bar" style="background: linear-gradient(to right, #fff, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00);"></div>
-            <div class="legend-labels"><span>0</span><span>${pMax}</span></div>
+            <div class="gradient-bar" style="background: linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 27%, #00ffff 48%, #0000ff 73%, #ff00ff 100%);"></div>
+            <div class="legend-labels"><span>0</span><span>${pMid}</span><span>${pMax}</span></div>
           `;
         }
       } else if (type === 'precip_max' || type === 'precip_min') {
         titleEl.innerText = type === 'precip_max' ? "Wettest Month" : "Driest Month";
         contentEl.innerHTML = `
-          <div class="gradient-bar" style="background: linear-gradient(to right, #800080, #0000ff, #00ff00, #ffff00, #ff0000);"></div>
+          <div class="gradient-bar" style="background: linear-gradient(to right, #ff00ff, #0000ff, #00ff00, #ffff00, #ff0000);"></div>
           <div class="legend-labels"><span>Jan</span><span>Jul</span><span>Dec</span></div>
         `;
       }
