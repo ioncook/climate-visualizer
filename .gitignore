@@ -1,0 +1,16 @@
+# Global Large Dataset (ignore for git push)
+Current data/
+All data/
+all data/
+
+# Local Environment
+tile_env/
+__pycache__/
+
+# Old dynamic caches/scripts (clean project only)
+tiles/
+generate_tiles.py
+tile_server.py
+
+# Build artifacts are kept for hosting
+# docs/ is NOT ignored as it is the website source
