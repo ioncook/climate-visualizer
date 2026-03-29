@@ -431,9 +431,11 @@
       } else if (type === 'temp') {
         titleEl.innerText = isCompare ? "Temperature Change" : `${mText} Average Temperature`;
         if (isCompare) {
+          const t1 = isMetric ? "-0.8°C" : "-1.5°F";
+          const t2 = isMetric ? "+1.7°C" : "+3°F";
           contentEl.innerHTML = `
             <div class="gradient-bar" style="background: linear-gradient(to right, #0000ff, #00ff00, #ff0000);"></div>
-            <div class="legend-labels"><span>Cooler</span><span>Stable</span><span>Warmer</span></div>
+            <div class="legend-labels"><span>${t1}</span><span>0°</span><span>${t2}</span></div>
           `;
         } else {
           const tMin = isMetric ? "-30°C" : "-22°F";

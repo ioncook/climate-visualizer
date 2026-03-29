@@ -97,11 +97,18 @@ def _pct_diff_magnitude(v1, v2):
     return diff_pct, norm_mag
 
 def get_temp_color_array(t1, t2, void_mask, water_mask):
-    """Temp change: positive=red(0°), negative=blue(240°), zero=green(120°)."""
-    diff_pct, norm_mag = _pct_diff_magnitude(t1, t2)
-    hue = np.where(diff_pct > 0, 120.0 * (1.0 - norm_mag), 120.0 + 120.0 * norm_mag)
-    no_change = np.abs(diff_pct) < 1.0
-    hue[no_change] = 120.0
+    """Temp change: Absolute degF. Blue=-1.5F, Green=0, Red=+3.0F."""
+    diff_c = t2 - t1
+    diff_f = diff_c * 1.8  # Convert Celsius delta to Fahrenheit delta
+    
+    # For positive side (0 up to +3.0 F)
+    pos_n = np.clip(diff_f / 3.0, 0, 1)
+    # For negative side (-1.5 F up to 0)
+    neg_n = np.clip(np.abs(diff_f) / 1.5, 0, 1)
+
+    # Hue: Red=0, Green=120, Blue=240
+    hue = np.where(diff_f >= 0, 120.0 * (1.0 - pos_n), 120.0 + 120.0 * neg_n)
+    
     return _hsl_array_to_rgba(hue, void_mask, water_mask)
 
 def get_precip_color_array(p1, p2, void_mask, water_mask):
