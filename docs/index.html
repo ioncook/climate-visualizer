@@ -5,8 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Climate Visualizer</title>
-  <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
+  <link rel="icon" href="logo.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body {
@@ -185,7 +184,7 @@
 <body>
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 8px;">
-      <span style="font-size: 20px;">🌍</span>
+      <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
       <h2 style="margin:0; font-size: 18px; white-space: nowrap;">Climate Visualizer</h2>
       <div style="display: flex; flex-direction: column; gap: 1px; margin-left: 8px; line-height: 1.1;">
         <span id="status" style="font-size: 11px; color:#555;">Ready</span>
@@ -589,14 +588,15 @@
     // Helper for Rainbow Color Coding via HSL
     function getTempColor(t) {
       let clamped = Math.max(-30, Math.min(30, t));
-      let hue = 270 * (1 - (clamped + 30) / 60);
+      let hue = 240 * (1 - (clamped + 30) / 60);
       return `hsl(${hue}, 100%, 65%)`;
     }
 
     function getPrecipColor(p) {
+      // Map 0-500mm to HSL 0-300 (Red to Magenta) to match map legend
       let clamped = Math.max(0, Math.min(500, p));
       let curve = Math.pow(clamped / 500, 0.7);
-      let hue = 270 * curve;
+      let hue = 300 * curve;
       return `hsl(${hue}, 100%, 65%)`;
     }
 
@@ -712,7 +712,7 @@
             </tr>
             <tr style="cursor: pointer;" onclick="setLayer('precip', 12)">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">P</td>
-              ${d1.p.map((p, i) => `<td style="color:${getPrecipColor(p / 2.5)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('precip', ${i})">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`).join('')}
+              ${d1.p.map((p, i) => `<td style="color:${getPrecipColor(p)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('precip', ${i})">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`).join('')}
               <td style="border-left: 1px solid #444; font-weight: bold; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
             </tr>
           </table>
