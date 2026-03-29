@@ -328,6 +328,9 @@
     const compareSelect = document.getElementById('compare');
     const projectionSelect = document.getElementById('projection');
 
+    // Single source of truth: dropdown values.
+    // We will initialize them from localStorage if available in loadStoredSettings()
+
     let currentBasemapId = 'dark';
 
     function setupBasemap(id) {
@@ -363,15 +366,32 @@
     projectionSelect.addEventListener('change', () => {
       const proj = projectionSelect.value;
       localStorage.setItem('climate_projection', proj);
-      map.setProjection({ type: proj });
+      if (proj === 'globe') {
+        map.setProjection({ type: 'globe' });
+        map.dragRotate.enable();
+      } else {
+        map.setProjection({ type: 'mercator' });
+        map.setPitch(0);
+        map.dragRotate.disable();
+      }
+      updateLayers();
     });
 
     map.on('load', () => {
       loadStoredSettings();
 
-      // Build the initial tile URL for Köppen (default)
+      const era = eraSelect.value;
+      const comp = compareSelect.value;
+      const isComp = comp !== 'none' && era !== comp && (currentMonth === "12" || currentLayerType === 'koppen');
+      
+      const erasValues = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
+      let era1 = era;
+      let era2 = comp;
+      if (isComp && erasValues.indexOf(era1) > erasValues.indexOf(era2)) [era1, era2] = [era2, era1];
+      
+      const tilePrefix = isComp ? `compare/${era1}_${era2}` : era;
       const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-      const initialTileUrl = baseUrl + "1991_2020/tiles_koppen/{z}/{x}/{y}.png?v=2";
+      const initialTileUrl = baseUrl + `${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png?v=2`;
 
       if (!map.getSource('data-source')) {
         map.addSource('data-source', { 
@@ -392,38 +412,52 @@
       }
 
       const proj = projectionSelect.value;
-      if (proj === 'globe') map.setProjection({ type: 'globe' });
+      if (proj === 'globe') {
+        map.setProjection({ type: 'globe' });
+        map.dragRotate.enable();
+      } else {
+        map.setProjection({ type: 'mercator' });
+        map.setPitch(0);
+        map.dragRotate.disable();
+      }
       
       updateLayers();
     });
 
     // STATIC PRE-GENERATED CHUNKS (Relative to selected Era)
-    let currentEra = "1991_2020";
-
     let currentMonth = "12"; // Default to annual
     let currentLayerType = 'koppen';
 
     // Layer state is managed via MapLibre sources/layers directly in updateLayers()
 
     function isCompareMode() {
-      return compareSelect.value !== 'none' && eraSelect.value !== compareSelect.value && (currentMonth === "12" || currentLayerType === 'koppen');
+      const era = eraSelect.value;
+      const comp = compareSelect.value;
+      // MUST show comparison ONLY if two different eras are chosen AND we are in an annual or Kopper layer
+      const supported = currentMonth == "12" || currentLayerType === 'koppen';
+      return comp !== 'none' && comp !== era && supported;
     }
 
     function updateLayers() {
-      if (!map.loaded()) return;
+      // Don't return if !map.loaded(); we want the latest setting to be queued/applied as soon as possible.
+      // maplibregl's API will handle most calls even before 'load' as long as the source exists.
 
+      const era = eraSelect.value;
+      const comp = compareSelect.value;
       const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
-      let era1 = currentEra;
-      let era2 = compareSelect.value;
-
-      if (era2 !== 'none' && eras.indexOf(era1) > eras.indexOf(era2)) {
+      
+      const isCompare = isCompareMode();
+      
+      let era1 = era;
+      let era2 = comp;
+      // For comparisons, we always sort era1 < era2 (earlier vs later)
+      if (isCompare && eras.indexOf(era1) > eras.indexOf(era2)) {
         [era1, era2] = [era2, era1];
       }
 
       const lType = currentLayerType;
       const m = currentMonth;
-      const isCompare = isCompareMode();
-      const tilePrefix = isCompare ? `compare/${era1}_${era2}` : currentEra;
+      const tilePrefix = isCompare ? `compare/${era1}_${era2}` : era;
 
       // Base path for tiles
       let tilePath = "";
@@ -441,7 +475,31 @@
 
       const op = opacitySlider.value / 100;
 
-      // Update source and visibility
+      // IMMEDIATE UI UPDATE
+      const mText = m == "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+      const statusEl = document.getElementById('status');
+
+      if (lType === 'none') {
+        statusEl.innerText = "Click map for data";
+        updateLegend('none');
+      } else if (lType === 'koppen') {
+        statusEl.innerText = isCompare ? `Köppen Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Köppen DB Active [${era.replace("_","-")}]`;
+        updateLegend('koppen', isCompare);
+      } else if (lType === 'precip') {
+        statusEl.innerText = isCompare ? `Precipitation Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Precipitation Active (${mText}) [${era.replace("_","-")}]`;
+        updateLegend('precip', isCompare);
+      } else if (lType === 'temp') {
+        statusEl.innerText = isCompare ? `Temperature Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Temperature Active (${mText}) [${era.replace("_","-")}]`;
+        updateLegend('temp', isCompare);
+      } else if (lType === 'precip_max') {
+        statusEl.innerText = "Month of Greatest Precipitation [1991-2020]";
+        updateLegend('precip_max');
+      } else if (lType === 'precip_min') {
+        statusEl.innerText = "Month of Least Precipitation [1991-2020]";
+        updateLegend('precip_min');
+      }
+
+      // SYNC MAP UPDATE
       const source = map.getSource('data-source');
       if (source && tilePath) {
         const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
@@ -452,29 +510,6 @@
         map.setPaintProperty('data-layer', 'raster-opacity', op);
       } else if (source) {
         map.setLayoutProperty('data-layer', 'visibility', 'none');
-      }
-
-      const mText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
-      const statusEl = document.getElementById('status');
-
-      if (lType === 'none') {
-        statusEl.innerText = "Click map for data";
-        updateLegend('none');
-      } else if (lType === 'koppen') {
-        statusEl.innerText = isCompare ? `Köppen Change [${era1} vs ${era2}]` : `Köppen DB Active [${currentEra}]`;
-        updateLegend('koppen', isCompare);
-      } else if (lType === 'precip') {
-        statusEl.innerText = isCompare ? `Precipitation Change [${era1} vs ${era2}]` : `Precipitation Active (${mText}) [${currentEra}]`;
-        updateLegend('precip', isCompare);
-      } else if (lType === 'temp') {
-        statusEl.innerText = isCompare ? `Temperature Change [${era1} vs ${era2}]` : `Temperature Active (${mText}) [${currentEra}]`;
-        updateLegend('temp', isCompare);
-      } else if (lType === 'precip_max') {
-        statusEl.innerText = "Month of Greatest Precipitation [1991-2020]";
-        updateLegend('precip_max');
-      } else if (lType === 'precip_min') {
-        statusEl.innerText = "Month of Least Precipitation [1991-2020]";
-        updateLegend('precip_min');
       }
     }
 
@@ -550,7 +585,7 @@
     map.on('popupclose', () => { isPopupOpen = false; });
 
     function maybeRefresh() {
-      if (isPopupOpen && lastLatLng) {
+      if (window.currentPopup && window.currentPopup.isOpen() && lastLatLng) {
         queryLocation(lastLatLng.lat, lastLatLng.lng);
       }
     }
@@ -558,7 +593,9 @@
     unitsSelect.addEventListener('change', () => {
       localStorage.setItem('climate_units', unitsSelect.value);
       updateLayers();
-      maybeRefresh();
+      if (window.currentPopup && window.currentPopup.isOpen()) {
+         updatePopup();
+      }
       updateLegend(currentLayerType, isCompareMode());
     });
 
@@ -578,7 +615,6 @@
     });
 
     eraSelect.addEventListener('change', () => {
-      currentEra = eraSelect.value;
       updateLayers();
       maybeRefresh();
     });
@@ -627,7 +663,13 @@
       }
       if (storedProjection) {
         projectionSelect.value = storedProjection;
-        map.setProjection({ type: storedProjection });
+        if (storedProjection === 'globe') {
+           map.setProjection({ type: 'globe' });
+        } else {
+           map.setProjection({ type: 'mercator' });
+           map.setPitch(0);
+           map.dragRotate.disable();
+        }
       }
     }
 
@@ -636,6 +678,7 @@
       if (type) currentLayerType = type;
       if (month !== undefined) currentMonth = String(month);
       updateLayers();
+      maybeRefresh();
     };
 
     // Scroll-to-change selection helper
@@ -684,7 +727,7 @@
       if (!lastQueryData || !lastLatLng) return;
       const { d1, d2, isCompare } = lastQueryData;
       const latlng = lastLatLng;
-      const era = currentEra;
+      const era = eraSelect.value;
       const compEra = document.getElementById('compare').value;
 
       const info1 = LEGENDS[d1.i] || ["Unk", "Unknown"];
@@ -798,43 +841,49 @@
 
       html += `</div>`;
       
-      if (window.currentPopup) window.currentPopup.remove();
-      window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup' })
-        .setLngLat([latlng.lng, latlng.lat])
-        .setHTML(html)
-        .addTo(map);
+      if (window.currentPopup && window.currentPopup.isOpen()) {
+        window.currentPopup.setHTML(html);
+        // Note: we don't need to update LngLat if it hasn't moved.
+      } else {
+        window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup' })
+          .setLngLat([latlng.lng, latlng.lat])
+          .setHTML(html)
+          .addTo(map);
+      }
     }
 
+
+    let queryAbortController = null;
 
     // OFFLINE CLICK QUERY
     async function queryLocation(lat, lng) {
       if (!lat) return;
+      
+      if (queryAbortController) queryAbortController.abort();
+      queryAbortController = new AbortController();
+      const signal = queryAbortController.signal;
 
-      // Support multi-world panning by wrapping longitude and clamping latitude
       const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
       const clampedLat = Math.max(-90, Math.min(90, lat));
 
       const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
-      let era1 = currentEra;
+      let era1 = eraSelect.value;
       let era2 = compareSelect.value;
 
-      // Auto-sort to earlier vs later
       if (era2 !== 'none' && eras.indexOf(era1) > eras.indexOf(era2)) {
         [era1, era2] = [era2, era1];
       }
 
       const isComp = era2 !== 'none' && era1 !== era2;
-
       const latChunk = Math.floor(clampedLat / 10) * 10;
       const lonChunk = Math.floor(wrappedLng / 10) * 10;
 
-      // Fetch specifically what is rendered on screen base logic
       const chunk1Key = `${era1}_${latChunk}_${lonChunk}`;
       const chunk2Key = isComp ? `${era2}_${latChunk}_${lonChunk}` : null;
 
       async function fetchChunk(era, key) {
         if (!queryCache[key]) {
-          const res = await fetch(`${era}/query_tiles/${latChunk}_${lonChunk}.json`);
+          const res = await fetch(`${era}/query_tiles/${latChunk}_${lonChunk}.json`, { signal });
           if (!res.ok) throw new Error();
           queryCache[key] = await res.json();
         }
@@ -844,8 +893,7 @@
       try {
         document.getElementById('status').innerText = `Loading...`;
 
-        // When not comparing, base uses currentEra (which could be older or newer), but our logic aligns era1 as currentEra if isComp=false
-        const baseEraName = isComp ? era1 : currentEra;
+        const baseEraName = isComp ? era1 : eraSelect.value;
         const db1 = await fetchChunk(baseEraName, `${baseEraName}_${latChunk}_${lonChunk}`);
 
         const y = Math.max(0, Math.min(1799, Math.floor((90 - clampedLat) / 180 * 1800)));
@@ -859,13 +907,18 @@
           d2 = db2[`${y}_${x}`];
         }
 
+        if (signal.aborted) return;
         if (!d1) return;
-        lastQueryData = { d1, d2, isCompare: isComp && d2 };
+        
+        // Ensure we explicitly state if this query data contains comparison
+        lastQueryData = { d1, d2: isComp ? d2 : null, isCompare: isComp && d2 };
         lastLatLng = { lat, lng };
         document.getElementById('status').innerText = isComp ? "Comparison Data Ready" : "Data Ready";
         updatePopup();
       } catch (err) {
-        document.getElementById('status').innerText = "Ocean (No Data)";
+        if (err.name !== 'AbortError') {
+          document.getElementById('status').innerText = "Ocean (No Data)";
+        }
       }
     }
 
@@ -885,6 +938,39 @@
         map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
       }
       lastRightClickTime = now;
+    });
+
+    // Middle-button drag to zoom (Google Earth style)
+    let isMiddleDragging = false;
+    let startY = 0;
+    let startZoom = 0;
+
+    map.getCanvas().addEventListener('mousedown', (e) => {
+      if (e.button === 1) { // Middle button
+        isMiddleDragging = true;
+        startY = e.clientY;
+        startZoom = map.getZoom();
+        map.dragRotate.disable(); // Prevent rotation during zoom drag
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isMiddleDragging) {
+        const deltaY = startY - e.clientY;
+        const zoomDelta = deltaY / 100; // Adjust sensitivity here
+        map.setZoom(startZoom + zoomDelta);
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 1 && isMiddleDragging) {
+        isMiddleDragging = false;
+        // Re-enable rotation only if in globe mode
+        if (projectionSelect.value === 'globe') {
+          map.dragRotate.enable();
+        }
+      }
     });
   </script>
 </body>
