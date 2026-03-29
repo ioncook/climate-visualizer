@@ -118,29 +118,54 @@
     .maplibregl-popup-content {
       background: #1a1a1a !important;
       color: #fff !important;
-      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
       border-radius: 8px !important;
       padding: 10px !important;
     }
 
-    .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #1a1a1a !important; }
-    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #1a1a1a !important; }
-    .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #1a1a1a !important; }
-    .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #1a1a1a !important; }
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip {
+      border-bottom-color: #1a1a1a !important;
+    }
+
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+      border-top-color: #1a1a1a !important;
+    }
+
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+      border-right-color: #1a1a1a !important;
+    }
+
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+      border-left-color: #1a1a1a !important;
+    }
+
+    .maplibregl-popup-anchor-top-left .maplibregl-popup-tip {
+       border-bottom-color: #1a1a1a !important;
+    }
+    .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+       border-bottom-color: #1a1a1a !important;
+    }
+    .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip {
+       border-top-color: #1a1a1a !important;
+    }
+    .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+       border-top-color: #1a1a1a !important;
+    }
 
     .maplibregl-popup-close-button {
-       color: #888 !important;
-       font-size: 16px !important;
-       right: 2px !important;
-       top: 0px !important;
-       padding: 0 5px !important;
-       border: none !important;
-       background: transparent !important;
-       outline: none !important;
+      color: #888 !important;
+      font-size: 16px !important;
+      right: 2px !important;
+      top: 0px !important;
+      padding: 0 5px !important;
+      border: none !important;
+      background: transparent !important;
+      outline: none !important;
     }
+
     .maplibregl-popup-close-button:hover {
-       color: #fff !important;
-       background: transparent !important;
+      color: #fff !important;
+      background: transparent !important;
     }
 
     .maplibregl-ctrl-attrib {
@@ -179,11 +204,13 @@
       padding: 0;
       border: none;
     }
+
     input[type=range]::-webkit-slider-runnable-track {
       height: 4px;
       background: #444;
       border-radius: 2px;
     }
+
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
       height: 12px;
@@ -192,8 +219,9 @@
       background: #aaa;
       cursor: pointer;
       margin-top: -4px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.5);
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
     }
+
     input[type=range]:hover::-webkit-slider-thumb {
       background: #fff;
     }
@@ -353,7 +381,7 @@
         if (map.getLayer('basemap-layer')) map.setLayoutProperty('basemap-layer', 'visibility', 'none');
         return;
       }
-      
+
       const { url, attribution } = BASEMAPS[id];
       if (map.getLayer('basemap-layer')) map.removeLayer('basemap-layer');
       if (map.getSource('basemap-source')) map.removeSource('basemap-source');
@@ -398,29 +426,29 @@
       const era = eraSelect.value;
       const comp = compareSelect.value;
       const isComp = comp !== 'none' && era !== comp && (currentMonth === "12" || currentLayerType === 'koppen');
-      
+
       const erasValues = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
       let era1 = era;
       let era2 = comp;
       if (isComp && erasValues.indexOf(era1) > erasValues.indexOf(era2)) [era1, era2] = [era2, era1];
-      
+
       const tilePrefix = isComp ? `compare/${era1}_${era2}` : era;
       const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
       const initialTileUrl = baseUrl + `${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png?v=2`;
 
       if (!map.getSource('data-source')) {
-        map.addSource('data-source', { 
-          type: 'raster', 
-          tiles: [initialTileUrl], 
+        map.addSource('data-source', {
+          type: 'raster',
+          tiles: [initialTileUrl],
           tileSize: 256,
           maxzoom: 6
         });
       }
-      
+
       if (!map.getLayer('data-layer')) {
-        map.addLayer({ 
-          id: 'data-layer', 
-          type: 'raster', 
+        map.addLayer({
+          id: 'data-layer',
+          type: 'raster',
           source: 'data-source',
           paint: { 'raster-opacity': 0.75, 'raster-resampling': 'nearest' }
         });
@@ -435,7 +463,7 @@
         map.setPitch(0);
         map.dragRotate.disable();
       }
-      
+
       updateLayers();
     });
 
@@ -460,9 +488,9 @@
       const era = eraSelect.value;
       const comp = compareSelect.value;
       const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
-      
+
       const isCompare = isCompareMode();
-      
+
       let era1 = era;
       let era2 = comp;
       // For comparisons, we always sort era1 < era2 (earlier vs later)
@@ -498,13 +526,13 @@
         statusEl.innerText = "Click map for data";
         updateLegend('none');
       } else if (lType === 'koppen') {
-        statusEl.innerText = isCompare ? `Köppen Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Köppen DB Active [${era.replace("_","-")}]`;
+        statusEl.innerText = isCompare ? `Köppen Change [${era1.replace("_", "-")} vs ${era2.replace("_", "-")}]` : `Köppen DB Active [${era.replace("_", "-")}]`;
         updateLegend('koppen', isCompare);
       } else if (lType === 'precip') {
-        statusEl.innerText = isCompare ? `Precipitation Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Precipitation Active (${mText}) [${era.replace("_","-")}]`;
+        statusEl.innerText = isCompare ? `Precipitation Change [${era1.replace("_", "-")} vs ${era2.replace("_", "-")}]` : `Precipitation Active (${mText}) [${era.replace("_", "-")}]`;
         updateLegend('precip', isCompare);
       } else if (lType === 'temp') {
-        statusEl.innerText = isCompare ? `Temperature Change [${era1.replace("_","-")} vs ${era2.replace("_","-")}]` : `Temperature Active (${mText}) [${era.replace("_","-")}]`;
+        statusEl.innerText = isCompare ? `Temperature Change [${era1.replace("_", "-")} vs ${era2.replace("_", "-")}]` : `Temperature Active (${mText}) [${era.replace("_", "-")}]`;
         updateLegend('temp', isCompare);
       } else if (lType === 'precip_max') {
         statusEl.innerText = "Month of Greatest Precipitation [1991-2020]";
@@ -519,7 +547,7 @@
       if (source && tilePath) {
         const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         const absoluteTileUrl = baseUrl + tilePath;
-        
+
         source.setTiles([absoluteTileUrl]);
         map.setLayoutProperty('data-layer', 'visibility', 'visible');
         map.setPaintProperty('data-layer', 'raster-opacity', op);
@@ -609,7 +637,7 @@
       localStorage.setItem('climate_units', unitsSelect.value);
       updateLayers();
       if (window.currentPopup && window.currentPopup.isOpen()) {
-         updatePopup();
+        updatePopup();
       }
       updateLegend(currentLayerType, isCompareMode());
     });
@@ -679,11 +707,11 @@
       if (storedProjection) {
         projectionSelect.value = storedProjection;
         if (storedProjection === 'globe') {
-           map.setProjection({ type: 'globe' });
+          map.setProjection({ type: 'globe' });
         } else {
-           map.setProjection({ type: 'mercator' });
-           map.setPitch(0);
-           map.dragRotate.disable();
+          map.setProjection({ type: 'mercator' });
+          map.setPitch(0);
+          map.dragRotate.disable();
         }
       }
     }
@@ -844,12 +872,16 @@
       }
 
       html += `</div>`;
-      
+
       if (window.currentPopup && window.currentPopup.isOpen()) {
         window.currentPopup.setHTML(html);
         // Note: we don't need to update LngLat if it hasn't moved.
       } else {
-        window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup' })
+        window.currentPopup = new maplibregl.Popup({
+          maxWidth: '450px',
+          className: 'climate-popup',
+          anchor: 'bottom'
+        })
           .setLngLat([latlng.lng, latlng.lat])
           .setHTML(html)
           .addTo(map);
@@ -862,7 +894,7 @@
     // OFFLINE CLICK QUERY
     async function queryLocation(lat, lng, isRefresh = false) {
       if (!lat) return;
-      
+
       const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
       const clampedLat = Math.max(-90, Math.min(90, lat));
 
@@ -919,11 +951,11 @@
           if (window.currentPopup) window.currentPopup.remove();
           return;
         }
-        
+
         // Freeze the era/compare names used during BEFORE THIS query
-        lastQueryData = { 
-          d1, 
-          d2: isComp ? d2 : null, 
+        lastQueryData = {
+          d1,
+          d2: isComp ? d2 : null,
           isCompare: isComp && d2,
           era: eraSelect.value,
           compareEra: compareSelect.value
@@ -960,7 +992,7 @@
       lastLatLng = { lat: clampedLat, lng: wrappedLng };
       queryLocation(lat, lng);
     });
-    
+
     // Popup open/close tracking
     map.on('popupopen', () => { isPopupOpen = true; });
     map.on('popupclose', () => { isPopupOpen = false; });
