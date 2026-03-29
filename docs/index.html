@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Climate Visualizer</title>
   <link rel="icon" href="logo.png" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.css" />
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -115,16 +115,26 @@
       color: #ccc;
     }
 
-    .leaflet-popup-content-wrapper {
+    .maplibregl-popup-content {
       background: #1a1a1a !important;
       color: #fff !important;
-      border: 1px solid #444;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
       border-radius: 8px !important;
+      padding: 10px !important;
     }
 
-    .leaflet-popup-tip {
-      background: #1a1a1a !important;
-      border: 1px solid #444;
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #1a1a1a !important; }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #1a1a1a !important; }
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #1a1a1a !important; }
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #1a1a1a !important; }
+
+    .maplibregl-ctrl-attrib {
+      background: rgba(0, 0, 0, 0.5) !important;
+      color: #aaa !important;
+    }
+
+    .maplibregl-ctrl-attrib a {
+      color: #888 !important;
     }
 
     .setting-row {
@@ -237,6 +247,13 @@
               <option value="metric">Metric (°C, mm)</option>
             </select>
           </div>
+          <div class="setting-row">
+            <span>Projection</span>
+            <select id="projection">
+              <option value="globe">3D Globe</option>
+              <option value="mercator">Flat (2D)</option>
+            </select>
+          </div>
           <div class="setting-row" id="opacity-row">
             <span>Layer Opacity</span>
             <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
@@ -255,7 +272,7 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>
 
   <script>
     const COLORS = {
@@ -281,39 +298,102 @@
       29: ["ET", "Polar tundra / Highland"], 30: ["EF", "Polar frost / Ice cap"]
     };
 
-    const map = L.map('map', { center: [20, 0], zoom: 3, zoomSnap: 0, wheelPxPerZoomLevel: 50, zoomControl: false });
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {},
+        layers: []
+      },
+      center: [0, 20],
+      zoom: 1.5,
+      projection: 'globe',
+      attributionControl: true
+    });
 
-    // BASEMAP LAYERS
+    // BASEMAP SOURCES
     const BASEMAPS = {
-      dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { subdomains: 'abcd' }),
-      topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'),
-      physical: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}'),
-      light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { subdomains: 'abcd' }),
-      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
-      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}')
+      dark: { url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+      topo: { url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM' },
+      physical: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Earthstar Geographics, Garmin, FAO, METI/NASA, USGS' },
+      light: { url: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+      osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+      satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Earthstar Geographics' }
     };
-
-    let currentBasemapLayer = BASEMAPS.dark.addTo(map);
 
     const basemapSelect = document.getElementById('basemap');
     const unitsSelect = document.getElementById('units');
     const opacitySlider = document.getElementById('layer-opacity');
     const eraSelect = document.getElementById('era');
     const compareSelect = document.getElementById('compare');
+    const projectionSelect = document.getElementById('projection');
 
+    let currentBasemapId = 'dark';
 
+    function setupBasemap(id) {
+      if (id === 'none') {
+        if (map.getLayer('basemap-layer')) map.setLayoutProperty('basemap-layer', 'visibility', 'none');
+        return;
+      }
+      
+      const { url, attribution } = BASEMAPS[id];
+      if (map.getLayer('basemap-layer')) map.removeLayer('basemap-layer');
+      if (map.getSource('basemap-source')) map.removeSource('basemap-source');
+
+      map.addSource('basemap-source', {
+        type: 'raster',
+        tiles: [url],
+        tileSize: 256,
+        attribution: attribution
+      });
+
+      map.addLayer({
+        id: 'basemap-layer',
+        type: 'raster',
+        source: 'basemap-source'
+      }, map.getLayer('data-layer') ? 'data-layer' : undefined);
+    }
 
     basemapSelect.addEventListener('change', (e) => {
-      if (currentBasemapLayer) map.removeLayer(currentBasemapLayer);
-      
-      const selected = basemapSelect.value;
-      localStorage.setItem('climate_basemap', selected);
-      if (selected !== 'none') {
-        currentBasemapLayer = BASEMAPS[selected];
-        currentBasemapLayer.addTo(map);
-      } else {
-        currentBasemapLayer = null;
+      currentBasemapId = basemapSelect.value;
+      localStorage.setItem('climate_basemap', currentBasemapId);
+      setupBasemap(currentBasemapId);
+    });
+
+    projectionSelect.addEventListener('change', () => {
+      const proj = projectionSelect.value;
+      localStorage.setItem('climate_projection', proj);
+      map.setProjection({ type: proj });
+    });
+
+    map.on('load', () => {
+      loadStoredSettings();
+
+      // Build the initial tile URL for Köppen (default)
+      const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+      const initialTileUrl = baseUrl + "1991_2020/tiles_koppen/{z}/{x}/{y}.png?v=2";
+
+      if (!map.getSource('data-source')) {
+        map.addSource('data-source', { 
+          type: 'raster', 
+          tiles: [initialTileUrl], 
+          tileSize: 256,
+          maxzoom: 6
+        });
       }
+      
+      if (!map.getLayer('data-layer')) {
+        map.addLayer({ 
+          id: 'data-layer', 
+          type: 'raster', 
+          source: 'data-source',
+          paint: { 'raster-opacity': 0.75, 'raster-resampling': 'nearest' }
+        });
+      }
+
+      const proj = projectionSelect.value;
+      if (proj === 'globe') map.setProjection({ type: 'globe' });
+      
       updateLayers();
     });
 
@@ -323,84 +403,77 @@
     let currentMonth = "12"; // Default to annual
     let currentLayerType = 'koppen';
 
-    // Placeholder layers
-    let koppenLayer = L.tileLayer("");
-    let precipLayer = L.tileLayer("");
-    let tempLayer = L.tileLayer("");
-    let maxPrecipLayer = L.tileLayer("");
-    let minPrecipLayer = L.tileLayer("");
+    // Layer state is managed via MapLibre sources/layers directly in updateLayers()
 
     function isCompareMode() {
       return compareSelect.value !== 'none' && eraSelect.value !== compareSelect.value && (currentMonth === "12" || currentLayerType === 'koppen');
     }
 
     function updateLayers() {
+      if (!map.loaded()) return;
+
       const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
       let era1 = currentEra;
       let era2 = compareSelect.value;
 
-      // Auto-sort to earlier vs later
       if (era2 !== 'none' && eras.indexOf(era1) > eras.indexOf(era2)) {
         [era1, era2] = [era2, era1];
       }
 
       const lType = currentLayerType;
       const m = currentMonth;
-
       const isCompare = isCompareMode();
       const tilePrefix = isCompare ? `compare/${era1}_${era2}` : currentEra;
 
-      map.removeLayer(koppenLayer);
-      map.removeLayer(precipLayer);
-      map.removeLayer(tempLayer);
-      map.removeLayer(maxPrecipLayer);
-      map.removeLayer(minPrecipLayer);
+      // Base path for tiles
+      let tilePath = "";
+      if (lType === 'koppen') {
+        tilePath = `${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png?v=2`;
+      } else if (lType === 'precip') {
+        tilePath = `${tilePrefix}/tiles_precip/${m}/{z}/{x}/{y}.png?v=2`;
+      } else if (lType === 'temp') {
+        tilePath = `${tilePrefix}/tiles_temp/${m}/{z}/{x}/{y}.png?v=2`;
+      } else if (lType === 'precip_max') {
+        tilePath = `1991_2020/tiles_precip_max/{z}/{x}/{y}.png?v=2`;
+      } else if (lType === 'precip_min') {
+        tilePath = `1991_2020/tiles_precip_min/{z}/{x}/{y}.png?v=2`;
+      }
 
       const op = opacitySlider.value / 100;
 
-      // Re-create layers for the correct Era to ensure full refresh
-      koppenLayer = L.tileLayer(`${tilePrefix}/tiles_koppen/{z}/{x}/{y}.png?v=2`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
-      });
-      precipLayer = L.tileLayer(`${tilePrefix}/tiles_precip/${m}/{z}/{x}/{y}.png?v=2`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
-      });
-      tempLayer = L.tileLayer(`${tilePrefix}/tiles_temp/${m}/{z}/{x}/{y}.png?v=2`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
-      });
-
-      // Special extreme layers (only for 1991_2020)
-      maxPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_max/{z}/{x}/{y}.png?v=2`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
-      });
-      minPrecipLayer = L.tileLayer(`1991_2020/tiles_precip_min/{z}/{x}/{y}.png?v=2`, {
-        maxNativeZoom: 6, maxZoom: 14, opacity: op, tms: false
-      });
+      // Update source and visibility
+      const source = map.getSource('data-source');
+      if (source && tilePath) {
+        const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        const absoluteTileUrl = baseUrl + tilePath;
+        
+        source.setTiles([absoluteTileUrl]);
+        map.setLayoutProperty('data-layer', 'visibility', 'visible');
+        map.setPaintProperty('data-layer', 'raster-opacity', op);
+      } else if (source) {
+        map.setLayoutProperty('data-layer', 'visibility', 'none');
+      }
 
       const mText = m === "12" ? "Annual" : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+      const statusEl = document.getElementById('status');
 
       if (lType === 'none') {
-        document.getElementById('status').innerText = "Click map for data";
+        statusEl.innerText = "Click map for data";
         updateLegend('none');
       } else if (lType === 'koppen') {
-        map.addLayer(koppenLayer);
-        document.getElementById('status').innerText = isCompare ? `Köppen Change [${era1} vs ${era2}]` : `Köppen DB Active [${currentEra}]`;
+        statusEl.innerText = isCompare ? `Köppen Change [${era1} vs ${era2}]` : `Köppen DB Active [${currentEra}]`;
         updateLegend('koppen', isCompare);
       } else if (lType === 'precip') {
-        map.addLayer(precipLayer);
-        document.getElementById('status').innerText = isCompare ? `Precipitation Change [${era1} vs ${era2}]` : `Precipitation Active (${mText}) [${currentEra}]`;
+        statusEl.innerText = isCompare ? `Precipitation Change [${era1} vs ${era2}]` : `Precipitation Active (${mText}) [${currentEra}]`;
         updateLegend('precip', isCompare);
       } else if (lType === 'temp') {
-        map.addLayer(tempLayer);
-        document.getElementById('status').innerText = isCompare ? `Temperature Change [${era1} vs ${era2}]` : `Temperature Active (${mText}) [${currentEra}]`;
+        statusEl.innerText = isCompare ? `Temperature Change [${era1} vs ${era2}]` : `Temperature Active (${mText}) [${currentEra}]`;
         updateLegend('temp', isCompare);
       } else if (lType === 'precip_max') {
-        map.addLayer(maxPrecipLayer);
-        document.getElementById('status').innerText = "Month of Greatest Precipitation [1991-2020]";
+        statusEl.innerText = "Month of Greatest Precipitation [1991-2020]";
         updateLegend('precip_max');
       } else if (lType === 'precip_min') {
-        map.addLayer(minPrecipLayer);
-        document.getElementById('status').innerText = "Month of Least Precipitation [1991-2020]";
+        statusEl.innerText = "Month of Least Precipitation [1991-2020]";
         updateLegend('precip_min');
       }
     }
@@ -492,11 +565,9 @@
     opacitySlider.addEventListener('input', () => {
       const op = opacitySlider.value / 100;
       localStorage.setItem('climate_opacity', opacitySlider.value);
-      if (koppenLayer) koppenLayer.setOpacity(op);
-      if (precipLayer) precipLayer.setOpacity(op);
-      if (tempLayer) tempLayer.setOpacity(op);
-      if (maxPrecipLayer) maxPrecipLayer.setOpacity(op);
-      if (minPrecipLayer) minPrecipLayer.setOpacity(op);
+      if (map.getLayer('data-layer')) {
+        map.setPaintProperty('data-layer', 'raster-opacity', op);
+      }
     });
 
     document.getElementById('opacity-row').addEventListener('wheel', (e) => {
@@ -536,24 +607,29 @@
     });
 
     // LOAD SAVED SETTINGS
-    (function loadStoredSettings() {
+    function loadStoredSettings() {
       const storedBasemap = localStorage.getItem('climate_basemap');
       const storedUnits = localStorage.getItem('climate_units');
       const storedOpacity = localStorage.getItem('climate_opacity');
+      const storedProjection = localStorage.getItem('climate_projection');
 
       if (storedBasemap) {
         basemapSelect.value = storedBasemap;
-        basemapSelect.dispatchEvent(new Event('change'));
+        currentBasemapId = storedBasemap;
       }
+      setupBasemap(currentBasemapId);
+
       if (storedUnits) {
         unitsSelect.value = storedUnits;
-        unitsSelect.dispatchEvent(new Event('change'));
       }
       if (storedOpacity) {
         opacitySlider.value = storedOpacity;
-        opacitySlider.dispatchEvent(new Event('input'));
       }
-    })();
+      if (storedProjection) {
+        projectionSelect.value = storedProjection;
+        map.setProjection({ type: storedProjection });
+      }
+    }
 
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
@@ -579,6 +655,7 @@
     makeSelectScrollable(compareSelect);
     makeSelectScrollable(basemapSelect);
     makeSelectScrollable(unitsSelect);
+    makeSelectScrollable(projectionSelect);
 
     // FETCH STATIC JSON DATABASE (Now Tiled/On-Demand)
     const queryCache = {};
@@ -720,7 +797,12 @@
       }
 
       html += `</div>`;
-      L.popup({ maxWidth: 450 }).setLatLng(latlng).setContent(html).openOn(map);
+      
+      if (window.currentPopup) window.currentPopup.remove();
+      window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup' })
+        .setLngLat([latlng.lng, latlng.lat])
+        .setHTML(html)
+        .addTo(map);
     }
 
 
@@ -787,7 +869,23 @@
       }
     }
 
-    map.on('click', (e) => queryLocation(e.latlng.lat, e.latlng.lng));
+    map.on('click', (e) => queryLocation(e.lngLat.lat, e.lngLat.lng));
+    map.on('moveend', () => { lastLatLng = map.getCenter(); });
+    
+    // Popup open/close tracking
+    map.on('popupopen', () => { isPopupOpen = true; });
+    map.on('popupclose', () => { isPopupOpen = false; });
+
+    // Double right-click to reset tilt/pitch
+    let lastRightClickTime = 0;
+    map.on('contextmenu', (e) => {
+      const now = Date.now();
+      if (now - lastRightClickTime < 500) {
+        e.originalEvent.preventDefault();
+        map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+      }
+      lastRightClickTime = now;
+    });
   </script>
 </body>
 

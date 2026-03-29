@@ -23,8 +23,20 @@ Comparison view:
 - Click the header to show change in Köppen zones
 - Click either of the yearly figures to show the change in temperature or precipitation
 
-Data used:
-Beck, H. E., T. R. McVicar, N. Vergopolan, A. Berg, N. J. Lutsko, A. Dufour, Z. Zeng, X. Jiang, A. I. J. M. van Dijk, and D. G. Miralles. [High-resolution (1 km) Köppen-Geiger maps for 1901–2099 based on constrained CMIP6 projections](https://www.nature.com/articles/s41597-023-02549-6). Scientific Data 10, 724 (2023).
+## Citations & Data Sources
 
-Inspired by [koppen.earth](https://koppen.earth)
-Created with [Google Antigravity](https://antigravity.google.com/)
+### Climate Data
+- **Köppen-Geiger Classifications & Climate Ensembles**: 
+  Beck, H. E., T. R. McVicar, N. Vergopolan, A. Berg, N. J. Lutsko, A. Dufour, Z. Zeng, X. Jiang, A. I. J. M. van Dijk, and D. G. Miralles. [High-resolution (1 km) Köppen-Geiger maps for 1901–2099 based on constrained CMIP6 projections](https://www.nature.com/articles/s41597-023-02549-6). *Scientific Data* 10, 724 (2023).
+
+### Software & Libraries
+- **Mapping Engine**: [MapLibre GL JS](https://maplibre.org/)
+- **Built with**: [Antigravity](https://antigravity.google.com/)
+
+### Basemap Credits
+- **CartoDB**: [Dark Matter](https://carto.com/basemaps/) & [Light Matter](https://carto.com/basemaps/) (Attribution: &copy; [CARTO](https://carto.com/attributions), &copy; [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors)
+- **Esri**: [World Physical Map](https://www.arcgis.com/home/item.html?id=c14112e4d07b4690a618471b058c49e1) & [Satellite Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) (Attribution: &copy; Esri, Earthstar Geographics, Garmin, FAO, METI/NASA, USGS)
+- **OpenTopoMap**: [Topography](https://opentopomap.org/) (Attribution: &copy; [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, SRTM)
+- **OpenStreetMap**: [Standard OSM](https://www.openstreetmap.org/) (Attribution: &copy; [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors)
+
+*Inspired by [koppen.earth](https://koppen.earth)*
