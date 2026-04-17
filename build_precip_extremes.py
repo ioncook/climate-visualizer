@@ -7,7 +7,7 @@ import gc
 from scipy import ndimage
 
 # Config
-Z_MAX = 6
+Z_MAX = 7
 OUT_DIR = 'docs'
 ERA = "1991_2020"
 MAX_WORKERS = 2
@@ -70,7 +70,8 @@ def process_extreme_task(args):
         
         ds = netCDF4.Dataset(ens_path)
         v_p = ds.variables['precipitation']
-        p = np.nan_to_num(v_p[:12], 0) # Only monthly
+        p = v_p[:12]
+        np.nan_to_num(p, copy=False, nan=0.0) # Only monthly
         for m in range(p.shape[0]):
             p[m] = fill_missing(p[m], v_p[m].mask if hasattr(v_p, 'mask') else None)
         ds.close()
@@ -122,14 +123,16 @@ def process_extreme_task(args):
         m_idx = _era_data['max_idx'][LAT_IDX, LON_IDX]
         img = _color_lut[m_idx].copy()
         img[water_mask] = img[void_mask] = [0, 0, 0, 0]
-        Image.fromarray(img, 'RGBA').save(max_path)
+        if np.any(img[:,:,3] > 0):
+            Image.fromarray(img, 'RGBA').save(max_path)
 
     # 2. MIN
     if not os.path.exists(min_path):
         m_idx = _era_data['min_idx'][LAT_IDX, LON_IDX]
         img = _color_lut[m_idx].copy()
         img[water_mask] = img[void_mask] = [0, 0, 0, 0]
-        Image.fromarray(img, 'RGBA').save(min_path)
+        if np.any(img[:,:,3] > 0):
+            Image.fromarray(img, 'RGBA').save(min_path)
 
     return True
 

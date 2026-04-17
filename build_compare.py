@@ -11,7 +11,7 @@ import gc
 from scipy import ndimage
 
 # Config
-Z_MAX = 6
+Z_MAX = 7
 OUT_DIR = 'docs'
 ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
 MAX_WORKERS = 1
@@ -139,8 +139,10 @@ def get_era_data(era_name):
         
         v_t = ds.variables['air_temperature']
         v_p = ds.variables['precipitation']
-        t = np.nan_to_num(v_t[:], 0)
-        p = np.nan_to_num(v_p[:], 0)
+        t = v_t[:]
+        np.nan_to_num(t, copy=False, nan=0.0)
+        p = v_p[:]
+        np.nan_to_num(p, copy=False, nan=0.0)
 
         # Extrapolate data into ocean for cleaner masking at the coastline
         for i in range(12):
@@ -205,21 +207,24 @@ def process_compare_task(args):
         img_k = _k_lut[diff_k].copy()
         img_k[void_mask] = [0, 0, 0, 0]
         img_k[water_mask] = [0, 0, 0, 0]
-        Image.fromarray(img_k, 'RGBA').save(koppen_path)
+        if np.any(img_k[:,:,3] > 0):
+            Image.fromarray(img_k, 'RGBA').save(koppen_path)
 
     # 2. PRECIP (positive=blue, negative=red)
     if not os.path.exists(precip_path):
         p1_c = d1['mP'][LAT_IDX, LON_IDX]
         p2_c = d2['mP'][LAT_IDX, LON_IDX]
         img_p = get_precip_color_array(p1_c, p2_c, void_mask, water_mask)
-        Image.fromarray(img_p, 'RGBA').save(precip_path)
+        if np.any(img_p[:,:,3] > 0):
+            Image.fromarray(img_p, 'RGBA').save(precip_path)
 
     # 3. TEMP (positive=red, negative=blue)
     if not os.path.exists(temp_path):
         t1_c = d1['mT'][LAT_IDX, LON_IDX]
         t2_c = d2['mT'][LAT_IDX, LON_IDX]
         img_t = get_temp_color_array(t1_c, t2_c, void_mask, water_mask)
-        Image.fromarray(img_t, 'RGBA').save(temp_path)
+        if np.any(img_t[:,:,3] > 0):
+            Image.fromarray(img_t, 'RGBA').save(temp_path)
 
     return True
 
