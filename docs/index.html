@@ -744,7 +744,6 @@
     makeSelectScrollable(projectionSelect);
 
     // FETCH STATIC JSON DATABASE (Now Tiled/On-Demand)
-    const queryCache = {};
 
     document.getElementById('status').innerText = "Click map to load high-res climate data";
 
@@ -837,6 +836,7 @@
       } else {
         // Full Monthly Chart for all single-era views (historical and modern)
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const isModern = era === '1991_2020';
 
         // Find min/max indices for modern precip
         const maxP = Math.max(...d1.p);
@@ -850,22 +850,33 @@
               <td style="text-align:left; font-weight:bold; padding:2px 0;"></td>
               ${months.map((m, i) => {
           let style = "";
-          let click = `setLayer('temp', ${i})`; // default
-          if (i === maxIdx) { style = "color:#8da0cf; text-decoration:underline;"; click = `setLayer('precip_max')`; }
-          else if (i === minIdx) { style = "color:#f1948a; text-decoration:underline;"; click = `setLayer('precip_min')`; }
-          return `<td style="padding: 0 2px; cursor:pointer; ${style}" onclick="${click}">${m}</td>`;
+          let click = isModern ? `setLayer('temp', ${i})` : ""; 
+          let cursor = isModern ? "cursor:pointer" : "cursor:default";
+          
+          if (i === maxIdx) { style = "color:#8da0cf; text-decoration:underline;"; click = `setLayer('precip_max')`; cursor = "cursor:pointer"; }
+          else if (i === minIdx) { style = "color:#f1948a; text-decoration:underline;"; click = `setLayer('precip_min')`; cursor = "cursor:pointer"; }
+          
+          return `<td style="padding: 0 2px; ${cursor}; ${style}" onclick="${click}">${m}</td>`;
         }).join('')}
               <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px;">Year</td>
             </tr>
             <tr style="cursor: pointer;" onclick="setLayer('temp', 12)">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">T°</td>
-              ${d1.t.map((t, i) => `<td style="color:${getTempColor(t)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('temp', ${i})">${isMetric ? Math.round(t) : Math.round(t * 1.8 + 32)}</td>`).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; color:${getTempColor(avgT1)};" onclick="event.stopPropagation(); setLayer('temp', 12)">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
+              ${d1.t.map((t, i) => {
+          const decoration = isModern ? "text-decoration: underline; cursor: pointer;" : "cursor: default;";
+          const click = isModern ? `event.stopPropagation(); setLayer('temp', ${i})` : "event.stopPropagation();";
+          return `<td style="color:${getTempColor(t)}; font-weight:bold; ${decoration}" onclick="${click}">${isMetric ? Math.round(t) : Math.round(t * 1.8 + 32)}</td>`;
+        }).join('')}
+              <td style="border-left: 1px solid #444; font-weight: bold; text-decoration: underline; cursor: pointer; color:${getTempColor(avgT1)};" onclick="event.stopPropagation(); setLayer('temp', 12)">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
             </tr>
             <tr style="cursor: pointer;" onclick="setLayer('precip', 12)">
               <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">P</td>
-              ${d1.p.map((p, i) => `<td style="color:${getPrecipColor(p)}; font-weight:bold;" onclick="event.stopPropagation(); setLayer('precip', ${i})">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
+              ${d1.p.map((p, i) => {
+          const decoration = isModern ? "text-decoration: underline; cursor: pointer;" : "cursor: default;";
+          const click = isModern ? `event.stopPropagation(); setLayer('precip', ${i})` : "event.stopPropagation();";
+          return `<td style="color:${getPrecipColor(p)}; font-weight:bold; ${decoration}" onclick="${click}">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`;
+        }).join('')}
+              <td style="border-left: 1px solid #444; font-weight: bold; text-decoration: underline; cursor: pointer; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
             </tr>
           </table>
         `;
@@ -888,15 +899,37 @@
       }
     }
 
-
+    const queryCache = {};
     let queryAbortController = null;
+
+    async function fetchJson(url, signal) {
+      if (queryCache[url]) return queryCache[url];
+      try {
+        const res = await fetch(url, { signal });
+        if (!res.ok) return null;
+        queryCache[url] = await res.json();
+        return queryCache[url];
+      } catch(e) { return null; }
+    }
+
+    function decodeRle(rle, px, py) {
+      if (!rle || !rle[py]) return 0;
+      const row = rle[py];
+      let cur = 0;
+      for (let i = 0; i < row.length; i++) {
+        let count = row[i][0];
+        if (px < cur + count) return row[i][1];
+        cur += count;
+      }
+      return 0;
+    }
 
     // OFFLINE CLICK QUERY
     async function queryLocation(lat, lng, isRefresh = false) {
       if (!lat) return;
 
       const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
-      const clampedLat = Math.max(-90, Math.min(90, lat));
+      const clampedLat = Math.max(-89.9, Math.min(89.9, lat));
 
       if (queryAbortController) queryAbortController.abort();
       queryAbortController = new AbortController();
@@ -914,49 +947,56 @@
       }
 
       const isComp = era2 !== 'none' && era1 !== era2;
-      const latChunk = Math.floor(clampedLat / 10) * 10;
-      const lonChunk = Math.floor(wrappedLng / 10) * 10;
 
-      const chunk1Key = `${era1}_${latChunk}_${lonChunk}`;
-      const chunk2Key = isComp ? `${era2}_${latChunk}_${lonChunk}` : null;
+      // Z=6 Web Mercator tile mathematics
+      const map_size = 256 * Math.pow(2, 6);
+      let x_norm = (wrappedLng + 180) / 360;
+      let y_norm = 0.5 - (Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI / 180) / 2)) / (2 * Math.PI));
+      
+      let px = Math.floor(x_norm * map_size);
+      let py = Math.floor(y_norm * map_size);
+      
+      if (py < 0 || py >= map_size) return;
+      
+      let tileX = Math.floor(px / 256);
+      let tileY = Math.floor(py / 256);
+      let pixelX = px % 256;
+      let pixelY = py % 256;
 
-      async function fetchChunk(era, key) {
-        if (!queryCache[key]) {
-          const res = await fetch(`${era}/query_tiles/${latChunk}_${lonChunk}.json`, { signal });
-          if (!res.ok) throw new Error();
-          queryCache[key] = await res.json();
-        }
-        return queryCache[key];
-      }
+      // 0.1 degree Grid and 10x10 Chunking
+      const latC = Math.floor(clampedLat / 10) * 10;
+      const lonC = Math.floor(wrappedLng / 10) * 10;
+      const gridY = Math.floor((90 - clampedLat) / 180 * 1800);
+      const gridX = Math.floor((wrappedLng + 180) / 360 * 3600) % 3600;
 
       try {
         document.getElementById('status').innerText = `Loading...`;
 
-        const baseEraName = isComp ? era1 : eraSelect.value;
-        const db1 = await fetchChunk(baseEraName, `${baseEraName}_${latChunk}_${lonChunk}`);
-
-        const y = Math.max(0, Math.min(1799, Math.floor((90 - clampedLat) / 180 * 1800)));
-        const x = Math.floor((wrappedLng + 180) / 360 * 3600) % 3600;
-
-        const d1 = db1[`${y}_${x}`];
-
-        let d2 = null;
-        if (isComp) {
-          const db2 = await fetchChunk(era2, chunk2Key);
-          d2 = db2[`${y}_${x}`];
-        }
+        const [rle1, rle2, grid1, grid2] = await Promise.all([
+          fetchJson(`${era1}/koppen_rle/6/${tileX}/${tileY}.json`, signal),
+          isComp ? fetchJson(`${era2}/koppen_rle/6/${tileX}/${tileY}.json`, signal) : Promise.resolve(null),
+          fetchJson(`${era1}/climate_grid/${latC}_${lonC}.json`, signal),
+          isComp ? fetchJson(`${era2}/climate_grid/${latC}_${lonC}.json`, signal) : Promise.resolve(null)
+        ]);
 
         if (signal.aborted) return;
-        if (!d1) {
+        
+        const kid1 = decodeRle(rle1, pixelX, pixelY);
+        const kid2 = isComp ? decodeRle(rle2, pixelX, pixelY) : 0;
+        const d1_raw = grid1 ? grid1[`${gridY}_${gridX}`] : null;
+        const d2_raw = (isComp && grid2) ? grid2[`${gridY}_${gridX}`] : null;
+
+        if (!kid1 || !d1_raw) {
+          document.getElementById('status').innerText = "Ocean (No Data)";
           if (window.currentPopup) window.currentPopup.remove();
           return;
         }
 
         // Freeze the era/compare names used during BEFORE THIS query
         lastQueryData = {
-          d1,
-          d2: isComp ? d2 : null,
-          isCompare: isComp && d2,
+          d1: { i: kid1, t: d1_raw.t, p: d1_raw.p },
+          d2: (isComp && d2_raw) ? { i: kid2 || kid1, t: d2_raw.t, p: d2_raw.p } : null,
+          isCompare: isComp && d2_raw,
           era: eraSelect.value,
           compareEra: compareSelect.value
         };

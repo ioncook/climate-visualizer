@@ -137,9 +137,13 @@ def process_tile_task(args):
         tile_classes = master_data[LAT_1KM, LON_1KM]
         img_k = _color_lut[tile_classes]
         img_k[void_mask] = [0, 0, 0, 0]
-        Image.fromarray(img_k, 'RGBA').save(koppen_tile_path)
+        # Only save if there is at least one non-transparent pixel
+        if np.any(img_k[:,:,3] > 0):
+            Image.fromarray(img_k, 'RGBA').save(koppen_tile_path)
 
-    for m in range(13):
+    # Generate all months (0-12) for modern era, but only annual (12) for others
+    months_to_gen = range(13) if era_name == "1991_2020" else [12]
+    for m in months_to_gen:
         p_p = os.path.join(era_dir, f'tiles_precip/{m}/{z}/{x}/{y}.png')
         t_p = os.path.join(era_dir, f'tiles_temp/{m}/{z}/{x}/{y}.png')
         os.makedirs(os.path.dirname(p_p), exist_ok=True)
@@ -149,14 +153,99 @@ def process_tile_task(args):
             vals = mean_precip[LAT_IDX, LON_IDX] if m == 12 else p_data[m, LAT_IDX, LON_IDX]
             img = _precip_lut[np.clip(vals, 0, 500).astype(int)].copy()
             img[water_mask] = img[void_mask] = [0, 0, 0, 0]
-            Image.fromarray(img, 'RGBA').save(p_p)
+            if np.any(img[:,:,3] > 0):
+                Image.fromarray(img, 'RGBA').save(p_p)
         
         if not os.path.exists(t_p):
             vals = mean_temp[LAT_IDX, LON_IDX] if m == 12 else t_data[m, LAT_IDX, LON_IDX]
             img = _temp_lut[np.clip(vals, -40, 59).astype(int) + 40].copy()
             img[water_mask] = img[void_mask] = [0, 0, 0, 0]
-            Image.fromarray(img, 'RGBA').save(t_p)
+            if np.any(img[:,:,3] > 0):
+                Image.fromarray(img, 'RGBA').save(t_p)
             
+    # 3. KOPPEN RLE JSON TILE (Z=6 Optimization)
+    if z == 6:
+        q_dir = os.path.join(era_dir, 'koppen_rle', str(z), str(x))
+        os.makedirs(q_dir, exist_ok=True)
+        q_p = os.path.join(q_dir, f"{y}.json")
+        
+        if not os.path.exists(q_p):
+            tile_classes = master_data[LAT_1KM, LON_1KM]
+            # Use RLE rows to maximize swath compression
+            rle_rows = []
+            for row in tile_classes:
+                packed = []
+                if np.all(row == row[0]):
+                    packed = [[256, int(row[0])]]
+                else:
+                    curr_val = int(row[0])
+                    curr_count = 0
+                    for v in row:
+                        if int(v) == curr_val:
+                            curr_count += 1
+                        else:
+                            packed.append([curr_count, curr_val])
+                            curr_val = int(v)
+                            curr_count = 1
+                    packed.append([curr_count, curr_val])
+                rle_rows.append(packed)
+            
+            with open(q_p, 'w') as f:
+                json.dump(rle_rows, f, separators=(',', ':'))
+
+    return True
+
+def build_climate_grid(era_name, ens_path):
+    print(f"Building Climate Grid Chunks for {era_name}...")
+    ds = netCDF4.Dataset(ens_path)
+    t_data = np.nan_to_num(ds.variables['air_temperature'][:], 0)
+    p_data = np.nan_to_num(ds.variables['precipitation'][:], 0)
+    ds.close()
+    
+    H, W = t_data.shape[1], t_data.shape[2]
+    out_base = os.path.join(OUT_DIR, era_name, 'climate_grid')
+    os.makedirs(out_base, exist_ok=True)
+    
+    total_steps = 18 * 36
+    step = 0
+    # Split into 10x10 degree chunks for efficient fetching
+    for lat_c in range(-90, 90, 10):
+        for lon_c in range(-180, 180, 10):
+            y_s, y_e = int((90-(lat_c+10))/180*H), int((90-lat_c)/180*H)
+            x_s, x_e = int((lon_c+180)/360*W), int(((lon_c+10)+180)/360*W)
+            
+            fn = os.path.join(out_base, f"{lat_c}_{lon_c}.json")
+            if os.path.exists(fn):
+                step += 1
+                continue
+                
+            chunk = {}
+            # Speed up: only iterate over land cells in this chunk
+            chunk_t = t_data[:, y_s:y_e, x_s:x_e]
+            chunk_p = p_data[:, y_s:y_e, x_s:x_e]
+            land_mask = np.any(chunk_t != 0, axis=0) | np.any(chunk_p != 0, axis=0)
+            
+            if np.any(land_mask):
+                valid_ys, valid_xs = np.where(land_mask)
+                for iy, ix in zip(valid_ys, valid_xs):
+                    y_abs, x_abs = y_s + iy, x_s + ix
+                    chunk[f"{y_abs}_{x_abs}"] = {
+                        "t": [round(float(t_data[m, y_abs, x_abs]), 1) for m in range(12)],
+                        "p": [int(round(float(p_data[m, y_abs, x_abs]))) for m in range(12)]
+                    }
+            
+            if chunk:
+                with open(fn, 'w') as f:
+                    json.dump(chunk, f, separators=(',', ':'))
+            
+            step += 1
+            if step % 50 == 0:
+                print(f"  > Climate Grid: {int(step/total_steps*100)}% complete...", flush=True)
+
+    del t_data
+    del p_data
+    gc.collect()
+
     return True
 
 if __name__ == "__main__":
@@ -177,36 +266,9 @@ if __name__ == "__main__":
     for era in ERAS:
         ens_path = f'All data/climate_data_0p1/{era}/ensemble_mean_0p1.nc'
         k_path = f'All data/koppen_geiger_nc/{era}/koppen_geiger_0p00833333.nc'
-        q_dir = os.path.join(OUT_DIR, era, 'query_tiles')
-        os.makedirs(q_dir, exist_ok=True)
         
-        # Build Query Tiles
-        if len(os.listdir(q_dir)) < 100:
-            print(f"Building Query Tiles for {era}...")
-            ds_e = netCDF4.Dataset(ens_path)
-            t_d = np.nan_to_num(ds_e.variables['air_temperature'][:], 0)
-            p_d = np.nan_to_num(ds_e.variables['precipitation'][:], 0)
-            l_len, lon_len = t_d.shape[1], t_d.shape[2]
-            ds_m = netCDF4.Dataset(k_path)
-            m_v = [v for v in ds_m.variables.keys() if 'kg_class' in v.lower()][0]
-            m_d = ds_m.variables[m_v][:]; H, W = m_d.shape
-
-            for lat_c in range(-90, 90, 10):
-                for lon_c in range(-180, 180, 10):
-                    chunk = {}
-                    y_s, y_e = int((90-(lat_c+10))/180*l_len), int((90-lat_c)/180*l_len)
-                    x_s, x_e = int((lon_c+180)/360*lon_len), int(((lon_c+10)+180)/360*lon_len)
-                    for y in range(y_s, y_e):
-                        for x in range(x_s, x_e):
-                            lat, lon = 90-(y*180/l_len + (180/l_len)/2), (x*360/lon_len-180+(360/lon_len)/2)
-                            y1, x1 = min(int((90-lat)/180*H), H-1), min(int((lon+180)/360*W)%W, W-1)
-                            kid = int(m_d[y1, x1])
-                            if kid > 0:
-                                chunk[f"{y}_{x}"] = {"i":kid,"t":[round(float(t_d[m,y,x]),1) for m in range(12)],"p":[int(round(float(p_d[m,y,x]))) for m in range(12)]}
-                    if chunk:
-                        with open(os.path.join(q_dir, f"{lat_c}_{lon_c}.json"), 'w') as f:
-                            json.dump(chunk, f, separators=(',', ':'))
-            ds_e.close(); ds_m.close()
+        # 1. GENERATE CLIMATE GRID ONCE (Low Res 0.1 deg)
+        build_climate_grid(era, ens_path)
 
         print(f"Adding Tile Tasks for Era: {era}")
         all_tasks.extend([(z, x, y, era, ens_path, k_path) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)])
