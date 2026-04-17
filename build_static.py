@@ -11,7 +11,7 @@ import gc
 from scipy import ndimage
 
 # --- CONFIG ---
-Z_MAX = 6
+Z_MAX = 7
 OUT_DIR = 'docs'
 ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
 MAX_WORKERS = 2 # Strictly limited to 2 workers for memory stability
@@ -76,12 +76,14 @@ def process_tile_task(args):
         _era_data = None 
         gc.collect()
         
-        # Load Ensemble
         ds_e = netCDF4.Dataset(ensemble_path)
         v_t = ds_e.variables['air_temperature']
         v_p = ds_e.variables['precipitation']
-        t = np.nan_to_num(v_t[:], 0)
-        p = np.nan_to_num(v_p[:], 0)
+        
+        t = v_t[:]
+        np.nan_to_num(t, copy=False, nan=0.0)
+        p = v_p[:]
+        np.nan_to_num(p, copy=False, nan=0.0)
         
         # Extrapolate data into ocean for cleaner masking at the coastline
         for m in range(t.shape[0]):
@@ -163,8 +165,8 @@ def process_tile_task(args):
             if np.any(img[:,:,3] > 0):
                 Image.fromarray(img, 'RGBA').save(t_p)
             
-    # 3. KOPPEN RLE JSON TILE (Z=6 Optimization)
-    if z == 6:
+    # 3. KOPPEN RLE JSON TILE (Z=7 Optimization)
+    if z == 7:
         q_dir = os.path.join(era_dir, 'koppen_rle', str(z), str(x))
         os.makedirs(q_dir, exist_ok=True)
         q_p = os.path.join(q_dir, f"{y}.json")
@@ -198,8 +200,13 @@ def process_tile_task(args):
 def build_climate_grid(era_name, ens_path):
     print(f"Building Climate Grid Chunks for {era_name}...")
     ds = netCDF4.Dataset(ens_path)
-    t_data = np.nan_to_num(ds.variables['air_temperature'][:], 0)
-    p_data = np.nan_to_num(ds.variables['precipitation'][:], 0)
+    
+    t_data = ds.variables['air_temperature'][:]
+    np.nan_to_num(t_data, copy=False, nan=0.0)
+    
+    p_data = ds.variables['precipitation'][:]
+    np.nan_to_num(p_data, copy=False, nan=0.0)
+    
     ds.close()
     
     H, W = t_data.shape[1], t_data.shape[2]

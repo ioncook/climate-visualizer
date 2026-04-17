@@ -441,7 +441,7 @@
           type: 'raster',
           tiles: [initialTileUrl],
           tileSize: 256,
-          maxzoom: 6
+          maxzoom: 7
         });
       }
 
@@ -948,8 +948,8 @@
 
       const isComp = era2 !== 'none' && era1 !== era2;
 
-      // Z=6 Web Mercator tile mathematics
-      const map_size = 256 * Math.pow(2, 6);
+      // Z=7 Web Mercator tile mathematics
+      const map_size = 256 * Math.pow(2, 7);
       let x_norm = (wrappedLng + 180) / 360;
       let y_norm = 0.5 - (Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI / 180) / 2)) / (2 * Math.PI));
       
@@ -973,8 +973,8 @@
         document.getElementById('status').innerText = `Loading...`;
 
         const [rle1, rle2, grid1, grid2] = await Promise.all([
-          fetchJson(`${era1}/koppen_rle/6/${tileX}/${tileY}.json`, signal),
-          isComp ? fetchJson(`${era2}/koppen_rle/6/${tileX}/${tileY}.json`, signal) : Promise.resolve(null),
+          fetchJson(`${era1}/koppen_rle/7/${tileX}/${tileY}.json`, signal),
+          isComp ? fetchJson(`${era2}/koppen_rle/7/${tileX}/${tileY}.json`, signal) : Promise.resolve(null),
           fetchJson(`${era1}/climate_grid/${latC}_${lonC}.json`, signal),
           isComp ? fetchJson(`${era2}/climate_grid/${latC}_${lonC}.json`, signal) : Promise.resolve(null)
         ]);
