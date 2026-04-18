@@ -604,10 +604,18 @@
           `;
         } else {
           const isAnnual = currentMonth === "12";
-          const pMid = isMetric ? (isAnnual ? "1620mm" : "135mm") : (isAnnual ? "64in" : "5.3in");
+          // p=0.5 normalized corresponds to color in middle of bar. 
+          // 500 * (0.5^(1/0.7)) = 185mm for monthly. 185 * 12 = 2220mm for annual.
+          const pMid = isMetric ? (isAnnual ? "2200mm" : "185mm") : (isAnnual ? "86in" : "7.3in");
           const pMax = isMetric ? (isAnnual ? "6000mm" : "500mm") : (isAnnual ? "240in" : "20in");
           contentEl.innerHTML = `
-            <div class="gradient-bar" style="background: linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 27%, #00ffff 48%, #0000ff 73%, #ff00ff 100%);"></div>
+            <div class="gradient-bar" style="background: linear-gradient(to right, 
+              hsl(0, 100%, 65%) 0%, 
+              hsl(60, 100%, 65%) 11%, 
+              hsl(120, 100%, 65%) 31%, 
+              hsl(180, 100%, 65%) 56%, 
+              hsl(240, 100%, 65%) 83%, 
+              hsl(270, 100%, 65%) 100%);"></div>
             <div class="legend-labels"><span>0</span><span>${pMid}</span><span>${pMax}</span></div>
           `;
         }
@@ -755,10 +763,10 @@
     }
 
     function getPrecipColor(p) {
-      // Map 0-500mm to HSL 0-300 (Red to Magenta) to match map legend
+      // Map 0-500mm to HSL 0-270 (Red to Purple) to match map legend (power curve 0.7)
       let clamped = Math.max(0, Math.min(500, p));
       let curve = Math.pow(clamped / 500, 0.7);
-      let hue = 300 * curve;
+      let hue = 270 * curve; 
       return `hsl(${hue}, 100%, 65%)`;
     }
 
@@ -791,21 +799,27 @@
       if (isCompare) {
         html += `
           <div style="font-weight:700; border-bottom:1px solid #444; padding-bottom:8px; margin-bottom:8px; display: flex; align-items: flex-start; cursor: pointer;" onclick="setLayer('koppen')">
-            <div style="display: flex; align-items: center;">
+            <div style="display: flex; align-items: center; margin-top: 2px;">
               <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info1[0]}</span>
               <span style="margin: 0 10px; color: #888;">&rarr;</span>
               <span style="background:${COLORS[d2.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info2[0]}</span>
             </div>
-            ${coordHtml}
+            <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
+              ${coordHtml}
+              <div style="color:#aaa;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+            </div>
           </div>`;
       } else {
         html += `
           <div style="font-weight:700; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px; display: flex; align-items: flex-start; cursor: pointer;" onclick="setLayer('koppen')">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
                <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info1[0]}</span>
-               ${info1[1]}
+               <span style="margin-top: 1px;">${info1[1]}</span>
             </div>
-            ${coordHtml}
+            <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
+              ${coordHtml}
+              <div style="color:#aaa;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+            </div>
           </div>`;
       }
 
@@ -972,6 +986,7 @@
       try {
         document.getElementById('status').innerText = `Loading...`;
 
+        // 1. Fetch Climate data (Local) first for instant UI response
         const [rle1, rle2, grid1, grid2] = await Promise.all([
           fetchJson(`${era1}/koppen_rle/7/${tileX}/${tileY}.json`, signal),
           isComp ? fetchJson(`${era2}/koppen_rle/7/${tileX}/${tileY}.json`, signal) : Promise.resolve(null),
@@ -992,14 +1007,57 @@
           return;
         }
 
-        // Freeze the era/compare names used during BEFORE THIS query
+        // Freeze basic data and show popup IMMEDIATELY with placeholder
         lastQueryData = {
           d1: { i: kid1, t: d1_raw.t, p: d1_raw.p },
           d2: (isComp && d2_raw) ? { i: kid2 || kid1, t: d2_raw.t, p: d2_raw.p } : null,
           isCompare: isComp && d2_raw,
           era: eraSelect.value,
-          compareEra: compareSelect.value
+          compareEra: compareSelect.value,
+          elevation: "---" 
         };
+        document.getElementById('status').innerText = isComp ? "Comparison Data Ready" : "Data Ready";
+        updatePopup();
+
+        // 2. Fetch Elevation (Remote) in background with Cache and Timeout
+        const elevKey = `${clampedLat.toFixed(3)}_${wrappedLng.toFixed(3)}`;
+        if (window.elevCache && window.elevCache[elevKey]) {
+           lastQueryData.elevation = window.elevCache[elevKey];
+           updatePopup();
+        } else {
+          if (!window.elevCache) window.elevCache = {};
+          const elevUrl = `https://api.open-meteo.com/v1/elevation?latitude=${clampedLat}&longitude=${wrappedLng}`;
+          
+          // Timeout to prevent "---" hanging forever
+          const timeoutId = setTimeout(() => {
+            if (lastQueryData && lastQueryData.elevation === "---") {
+              lastQueryData.elevation = null;
+              updatePopup();
+            }
+          }, 3000);
+
+          fetch(elevUrl, { signal })
+            .then(r => { clearTimeout(timeoutId); return r.ok ? r.json() : null; })
+            .then(elevData => {
+              if (signal.aborted || !lastQueryData) return;
+              if (elevData && elevData.elevation && elevData.elevation[0] !== undefined) {
+                let val = elevData.elevation[0];
+                if (document.getElementById('units').value === 'imperial') {
+                  val = val * 3.28084;
+                }
+                const rounded = Math.round(val);
+                lastQueryData.elevation = rounded;
+                window.elevCache[elevKey] = rounded; // Cache it
+                updatePopup();
+              } else {
+                lastQueryData.elevation = null;
+                updatePopup();
+              }
+            })
+            .catch(() => {
+              if (lastQueryData) { lastQueryData.elevation = null; updatePopup(); }
+            });
+        }
         document.getElementById('status').innerText = isComp ? "Comparison Data Ready" : "Data Ready";
         updatePopup();
       } catch (err) {
@@ -1023,10 +1081,8 @@
       const lngDir = wrappedLng >= 0 ? 'E' : 'W';
 
       lockedTooltipCoords = `
-        <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
           <div>${latAbs}° ${latDir}</div>
           <div>${lngAbs}° ${lngDir}</div>
-        </div>
       `;
       // CRITICAL: only update the storage on click!
       lastLatLng = { lat: clampedLat, lng: wrappedLng };
