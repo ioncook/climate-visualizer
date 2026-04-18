@@ -226,6 +226,34 @@
       background: #fff;
     }
 
+    .settings-menu::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .settings-menu::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 10px;
+    }
+
+    /* Navigation Crosshair */
+    #nav-crosshair {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      display: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      mix-blend-mode: difference;
+    }
+    #nav-crosshair::before, #nav-crosshair::after {
+      content: '';
+      position: absolute;
+      background: #fff;
+    }
+    #nav-crosshair::before { top: 50%; left: 0; width: 100%; height: 2px; margin-top: -1px; }
+    #nav-crosshair::after { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+
     .leaflet-tile {
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
@@ -235,6 +263,7 @@
 </head>
 
 <body>
+  <div id="nav-crosshair"></div>
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 8px;">
       <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
@@ -301,6 +330,14 @@
             <span>Layer Opacity</span>
             <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
           </div>
+          <div class="setting-row">
+            <span>3D Relief (Hillshade)</span>
+            <input type="checkbox" id="hillshade-check">
+          </div>
+          <div class="setting-row">
+            <span>3D Exaggeration</span>
+            <input type="number" id="terrain-exaggeration" step="0.1" min="0" max="20" value="2.0" style="width: 60px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; padding:2px 5px;">
+          </div>
         </div>
       </div>
     </div>
@@ -318,6 +355,9 @@
   <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>
 
   <script>
+    // HARDWARE ACCELERATION & OPTIMIZATIONS
+    maplibregl.prewarm(); // Initialize CPU/GPU resources early
+    maplibregl.workerCount = Math.max(2, navigator.hardwareConcurrency || 2); // Maximize parallel tile processing
     const COLORS = {
       1: "rgb(0, 0, 255)", 2: "rgb(0, 120, 255)", 3: "rgb(70, 170, 250)", 4: "rgb(255, 0, 0)",
       5: "rgb(255, 150, 150)", 6: "rgb(245, 165, 0)", 7: "rgb(255, 220, 100)", 8: "rgb(255, 255, 0)",
@@ -350,8 +390,29 @@
       },
       center: [0, 20],
       zoom: 1.5,
+      maxZoom: 11,
+      pixelRatio: Math.min(window.devicePixelRatio, 2),
       projection: 'globe',
-      attributionControl: true
+      antialias: true,
+      collectResourceTiming: false,
+      attributionControl: true,
+      
+      // OPTIMIZATION: Silence 404s for missing ocean/land tiles
+      transformRequest: (url, resourceType) => {
+        if (resourceType === 'Tile' && (url.includes('tiles_koppen') || url.includes('compare'))) {
+          const match = url.match(/\/(\d+)\/(\d+)\/(\d+)\.png/);
+          if (match) {
+            const z = parseInt(match[1]);
+            const y = parseInt(match[3]);
+            const total = Math.pow(2, z);
+            // Only suppress for higher zooms where tiles are strictly poles. 
+            // At low zooms (z < 5), tiles cover too much land to skip.
+            if (z > 4 && (y < total * 0.05 || y > total * 0.95)) {
+              return { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' };
+            }
+          }
+        }
+      }
     });
 
     // BASEMAP SOURCES
@@ -396,8 +457,11 @@
       map.addLayer({
         id: 'basemap-layer',
         type: 'raster',
-        source: 'basemap-source'
-      }, map.getLayer('data-layer') ? 'data-layer' : undefined);
+        source: 'basemap-source',
+        paint: {
+          'raster-fade-duration': 0
+        }
+      }, 'middle-anchor');
     }
 
     basemapSelect.addEventListener('change', (e) => {
@@ -412,15 +476,44 @@
       if (proj === 'globe') {
         map.setProjection({ type: 'globe' });
         map.dragRotate.enable();
+        const storedHill = localStorage.getItem('climate_hillshade') === 'true';
+        if (storedHill) {
+          map.setTerrain({ 'source': 'terrain-source', 'exaggeration': 2.0 });
+          map.setPitch(45);
+        }
       } else {
         map.setProjection({ type: 'mercator' });
         map.setPitch(0);
         map.dragRotate.disable();
+        map.setTerrain(null);
       }
       updateLayers();
     });
 
     map.on('load', () => {
+      // ANCHOR LAYERS (Z-Index Spacers)
+      // These invisible layers stay in fixed positions to ensure consistent stacking
+      if (!map.getLayer('bottom-anchor')) {
+        map.addLayer({ id: 'bottom-anchor', type: 'background', paint: { 'background-opacity': 0 } });
+      }
+      if (!map.getLayer('middle-anchor')) {
+        // Transparent layer used as a floor for the data layers
+        map.addLayer({ id: 'middle-anchor', type: 'background', paint: { 'background-opacity': 0 } });
+      }
+      if (!map.getLayer('top-anchor')) {
+        // Transparent layer used as a ceiling
+        map.addLayer({ id: 'top-anchor', type: 'background', paint: { 'background-opacity': 0 } });
+      }
+
+      // Add a permanent black canvas to prevent the Globe projection from rendering its wireframe
+      if (!map.getLayer('solid-background')) {
+        map.addLayer({
+          id: 'solid-background',
+          type: 'background',
+          paint: { 'background-color': '#000000' }
+        }, 'bottom-anchor');
+      }
+
       loadStoredSettings();
 
       const era = eraSelect.value;
@@ -450,8 +543,12 @@
           id: 'data-layer',
           type: 'raster',
           source: 'data-source',
-          paint: { 'raster-opacity': 0.75, 'raster-resampling': 'nearest' }
-        });
+          paint: { 
+            'raster-opacity': 0.75, 
+            'raster-resampling': 'nearest',
+            'raster-fade-duration': 0 
+          }
+        }, 'top-anchor');
       }
 
       const proj = projectionSelect.value;
@@ -463,6 +560,55 @@
         map.setPitch(0);
         map.dragRotate.disable();
       }
+
+      // 3D RELIEF (Hillshade & Geometry) 
+      if (!map.getSource('terrain-source')) {
+        map.addSource('terrain-source', {
+          'type': 'raster-dem',
+          'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          'tileSize': 256,
+          'encoding': 'terrarium',
+          'maxzoom': 14
+        });
+      }
+      
+      // Separate source for hillshade to avoid console warnings
+      if (!map.getSource('hillshade-source')) {
+        map.addSource('hillshade-source', {
+          'type': 'raster-dem',
+          'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          'tileSize': 256,
+          'encoding': 'terrarium',
+          'maxzoom': 14
+        });
+      }
+
+      // Single, performant layer for shadows
+      if (!map.getLayer('hillshade-layer')) {
+        map.addLayer({
+          id: 'hillshade-layer',
+          type: 'hillshade',
+          source: 'hillshade-source',
+          paint: { 
+            'hillshade-exaggeration': 0.4,
+            'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
+            'hillshade-highlight-color': 'rgba(255,255,255,0.1)'
+          }
+        }, 'top-anchor');
+      }
+      
+      const storedHill = localStorage.getItem('climate_hillshade') === 'true'; // Default to OFF
+      const viz = storedHill ? 'visible' : 'none';
+      if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
+      document.getElementById('hillshade-check').checked = storedHill;
+
+      if (storedHill) {
+        map.setPitch(45);
+        const exVal = parseFloat(localStorage.getItem('climate_exaggeration')) || 2.0;
+        map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+        document.getElementById('terrain-exaggeration').value = exVal;
+      }
+
 
       updateLayers();
     });
@@ -480,6 +626,39 @@
       const supported = currentMonth == "12" || currentLayerType === 'koppen';
       return comp !== 'none' && comp !== era && supported;
     }
+
+    document.getElementById('hillshade-check').addEventListener('change', (e) => {
+      const show = e.target.checked;
+      localStorage.setItem('climate_hillshade', show);
+      const viz = show ? 'visible' : 'none';
+      if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
+      
+      if (show) {
+        map.setPitch(45);
+        const exVal = parseFloat(document.getElementById('terrain-exaggeration').value) || 2.0;
+        map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+      } else {
+        map.setTerrain(null);
+        map.setPitch(0);
+      }
+    });
+
+    const terrainExInput = document.getElementById('terrain-exaggeration');
+    terrainExInput.addEventListener('change', () => {
+      const val = parseFloat(terrainExInput.value);
+      localStorage.setItem('climate_exaggeration', val);
+      if (document.getElementById('hillshade-check').checked) {
+        map.setTerrain({ 'source': 'terrain-source', 'exaggeration': val });
+      }
+    });
+    terrainExInput.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.5 : 0.5;
+      let val = (parseFloat(terrainExInput.value) + delta);
+      val = Math.max(0, Math.min(20, val));
+      terrainExInput.value = val.toFixed(1);
+      terrainExInput.dispatchEvent(new Event('change'));
+    });
 
     function updateLayers() {
       // Don't return if !map.loaded(); we want the latest setting to be queued/applied as soon as possible.
@@ -722,6 +901,8 @@
           map.dragRotate.disable();
         }
       }
+      
+      const storedNav = localStorage.getItem('climate_nav') === 'true'; 
     }
 
     // Global helper for interactive tooltip
@@ -806,7 +987,7 @@
             </div>
             <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
               ${coordHtml}
-              <div style="color:#aaa;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+              <div style="color:#888;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
             </div>
           </div>`;
       } else {
@@ -818,7 +999,7 @@
             </div>
             <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
               ${coordHtml}
-              <div style="color:#aaa;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+              <div style="color:#888;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
             </div>
           </div>`;
       }
@@ -1103,47 +1284,141 @@
       }
       lastRightClickTime = now;
     });
+    // GOOGLE EARTH STYLE MIDDLE-CLICK NAV (HYBRID TOGGLE/DRAG)
+    let isNavActive = false;
+    let middleStartPos = { x: 0, y: 0 };
+    let middleCurrentPos = { x: 0, y: 0 };
+    let middleStartLlngLat = null;
+    let middleStartTime = 0;
+    let isDragging = false;
+    let navAnimationId = null;
+    const crosshair = document.getElementById('nav-crosshair');
 
-    // Keyboard ESC to close popups
+    map.getCanvas().addEventListener('mousedown', (e) => {
+      if (e.button === 1) { // Middle Click
+        e.preventDefault();
+        
+        if (isNavActive) {
+          // If already active, a second click (mousedown) will potentially stop it
+          // Store start time to check if it's a quick click vs start of a drag
+          middleStartTime = Date.now();
+          middleStartPos = { x: e.clientX, y: e.clientY };
+          isDragging = false;
+          return;
+        }
+
+        middleStartTime = Date.now();
+        middleStartPos = { x: e.clientX, y: e.clientY };
+        middleCurrentPos = { x: e.clientX, y: e.clientY };
+        isDragging = false;
+
+        isNavActive = true;
+        // Capture geographic pivot only if on-globe
+        const rect = map.getCanvas().getBoundingClientRect();
+        const screenP = [e.clientX - rect.left, e.clientY - rect.top];
+        const pivot = map.unproject(screenP);
+        
+        // Validation: If off-globe, project often returns crazy coords or map.project(pivot) won't match.
+        // In MapLibre 5, unproject off-globe is usually handled gracefully but we double check.
+        const checkP = map.project(pivot);
+        const isOnGlobe = !isNaN(pivot.lng) && !isNaN(pivot.lat) && 
+                          Math.abs(checkP.x - screenP[0]) < 10 && 
+                          Math.abs(checkP.y - screenP[1]) < 10;
+        
+        middleStartLlngLat = isOnGlobe ? pivot : null;
+        
+        crosshair.style.left = e.clientX + 'px';
+        crosshair.style.top = e.clientY + 'px';
+        crosshair.style.display = 'block';
+        startNavLoop();
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isNavActive) {
+        middleCurrentPos = { x: e.clientX, y: e.clientY };
+        const dist = Math.hypot(e.clientX - middleStartPos.x, e.clientY - middleStartPos.y);
+        if (dist > 10) isDragging = true;
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 1 && isNavActive) {
+        const timeElapsed = Date.now() - middleStartTime;
+        // If it was already active AND this was a quick click -> toggle OFF
+        // If it was just started AND was a long drag -> stop on release
+        if (isDragging || timeElapsed > 300 || (timeElapsed < 300 && isDragging === false && Date.now() - middleStartTime > 0)) {
+           // We stop if it was a drag, or if it's the second click of a toggle
+           isNavActive = false;
+           crosshair.style.display = 'none';
+           cancelAnimationFrame(navAnimationId);
+        }
+      } else if (e.button === 0 && isNavActive) {
+        // Stop nav on left click too, for ease of use
+        isNavActive = false;
+        crosshair.style.display = 'none';
+        cancelAnimationFrame(navAnimationId);
+      }
+    });
+
+    function startNavLoop() {
+      if (!isNavActive) return;
+
+      let dx = middleCurrentPos.x - middleStartPos.x;
+      let dy = middleCurrentPos.y - middleStartPos.y;
+
+      // DEADZONE & CARDINAL LOCKING
+      const deadzone = 5;
+      if (Math.abs(dx) < deadzone && Math.abs(dy) < deadzone) {
+        dx = 0; dy = 0;
+      } else {
+        // If movement is primarily vertical, lock horizontal to zero
+        if (Math.abs(dy) > Math.abs(dx) * 1.28) dx = 0;
+        // If movement is primarily horizontal, lock vertical to zero
+        else if (Math.abs(dx) > Math.abs(dy) * 1.28) dy = 0;
+      }
+
+      if (dx !== 0 || dy !== 0) {
+        const currentZoom = map.getZoom();
+        const zoomDelta = -dy * 0.0005;
+        const bearingDelta = dx * 0.02;
+
+        // Perform the zoom and bearing change
+        map.jumpTo({
+          zoom: currentZoom + zoomDelta,
+          bearing: map.getBearing() + bearingDelta
+        });
+
+        // GEOGRAPHIC CORRECTION (Only if we started over land/globe)
+        if (middleStartLlngLat) {
+          const rect = map.getCanvas().getBoundingClientRect();
+          const pivotScreenX = middleStartPos.x - rect.left;
+          const pivotScreenY = middleStartPos.y - rect.top;
+          
+          const currentPivotPos = map.project(middleStartLlngLat);
+          const offsetX = currentPivotPos.x - pivotScreenX;
+          const offsetY = currentPivotPos.y - pivotScreenY;
+          
+          // STABILIZATION: Fade out the correction at low zooms to avoid "pulling" artifacts
+          // When zoomed out far (globe view), perfect locking causes perspective drift.
+          const z = map.getZoom();
+          let weight = 1.0;
+          if (z < 4) weight = Math.max(0, (z - 2.5) / 1.5);
+          
+          if (weight > 0) {
+            map.panBy([offsetX * weight, offsetY * weight], { duration: 0 });
+          }
+        }
+      }
+
+      navAnimationId = requestAnimationFrame(startNavLoop);
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && window.currentPopup) {
         window.currentPopup.remove();
       }
     });
-
-    // Middle-button drag to zoom (Google Earth style)
-    let isMiddleDragging = false;
-    let startY = 0;
-    let startZoom = 0;
-
-    map.getCanvas().addEventListener('mousedown', (e) => {
-      if (e.button === 1) { // Middle button
-        isMiddleDragging = true;
-        startY = e.clientY;
-        startZoom = map.getZoom();
-        map.dragRotate.disable(); // Prevent rotation during zoom drag
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (isMiddleDragging) {
-        const deltaY = startY - e.clientY;
-        const zoomDelta = deltaY / 100; // Adjust sensitivity here
-        map.setZoom(startZoom + zoomDelta);
-      }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 1 && isMiddleDragging) {
-        isMiddleDragging = false;
-        // Re-enable rotation only if in globe mode
-        if (projectionSelect.value === 'globe') {
-          map.dragRotate.enable();
-        }
-      }
-    });
   </script>
 </body>
-
 </html>
