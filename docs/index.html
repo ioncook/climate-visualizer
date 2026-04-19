@@ -254,6 +254,9 @@
     #nav-crosshair::before { top: 50%; left: 0; width: 100%; height: 2px; margin-top: -1px; }
     #nav-crosshair::after { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
 
+    .maplibregl-canvas { cursor: grab !important; }
+    .grabbing .maplibregl-canvas { cursor: grabbing !important; }
+
     .leaflet-tile {
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
@@ -476,6 +479,7 @@
       if (proj === 'globe') {
         map.setProjection({ type: 'globe' });
         map.dragRotate.enable();
+        map.dragPan.enable();
         const storedHill = localStorage.getItem('climate_hillshade') === 'true';
         if (storedHill) {
           map.setTerrain({ 'source': 'terrain-source', 'exaggeration': 2.0 });
@@ -1295,12 +1299,11 @@
     const crosshair = document.getElementById('nav-crosshair');
 
     map.getCanvas().addEventListener('mousedown', (e) => {
+      document.body.classList.add('grabbing');
       if (e.button === 1) { // Middle Click
         e.preventDefault();
         
         if (isNavActive) {
-          // If already active, a second click (mousedown) will potentially stop it
-          // Store start time to check if it's a quick click vs start of a drag
           middleStartTime = Date.now();
           middleStartPos = { x: e.clientX, y: e.clientY };
           isDragging = false;
@@ -1313,18 +1316,10 @@
         isDragging = false;
 
         isNavActive = true;
-        // Capture geographic pivot only if on-globe
         const rect = map.getCanvas().getBoundingClientRect();
         const screenP = [e.clientX - rect.left, e.clientY - rect.top];
         const pivot = map.unproject(screenP);
-        
-        // Validation: If off-globe, project often returns crazy coords or map.project(pivot) won't match.
-        // In MapLibre 5, unproject off-globe is usually handled gracefully but we double check.
-        const checkP = map.project(pivot);
-        const isOnGlobe = !isNaN(pivot.lng) && !isNaN(pivot.lat) && 
-                          Math.abs(checkP.x - screenP[0]) < 10 && 
-                          Math.abs(checkP.y - screenP[1]) < 10;
-        
+        const isOnGlobe = !isNaN(pivot.lng) && !isNaN(pivot.lat);
         middleStartLlngLat = isOnGlobe ? pivot : null;
         
         crosshair.style.left = e.clientX + 'px';
@@ -1343,18 +1338,15 @@
     });
 
     window.addEventListener('mouseup', (e) => {
+      document.body.classList.remove('grabbing');
       if (e.button === 1 && isNavActive) {
         const timeElapsed = Date.now() - middleStartTime;
-        // If it was already active AND this was a quick click -> toggle OFF
-        // If it was just started AND was a long drag -> stop on release
         if (isDragging || timeElapsed > 300 || (timeElapsed < 300 && isDragging === false && Date.now() - middleStartTime > 0)) {
-           // We stop if it was a drag, or if it's the second click of a toggle
            isNavActive = false;
            crosshair.style.display = 'none';
            cancelAnimationFrame(navAnimationId);
         }
       } else if (e.button === 0 && isNavActive) {
-        // Stop nav on left click too, for ease of use
         isNavActive = false;
         crosshair.style.display = 'none';
         cancelAnimationFrame(navAnimationId);
