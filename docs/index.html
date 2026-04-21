@@ -8,25 +8,52 @@
   <link rel="icon" href="favicon.png" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.css" />
   <style>
+    :root {
+      --bg: #000;
+      --header-bg: #121212;
+      --panel-bg: #1a1a1a;
+      --text: #e0e0e0;
+      --text-dim: #aaa;
+      --border: #333;
+      --btn-bg: #252525;
+      --map-void: #000 url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Ccircle cx="20" cy="30" r="0.8" fill="white" opacity="0.4"/%3E%3Ccircle cx="150" cy="80" r="0.5" fill="white" opacity="0.3"/%3E%3Ccircle cx="320" cy="40" r="1.2" fill="white" opacity="0.2"/%3E%3Ccircle cx="280" cy="250" r="0.6" fill="white" opacity="0.5"/%3E%3Ccircle cx="80" cy="350" r="1" fill="white" opacity="0.2"/%3E%3Ccircle cx="210" cy="180" r="0.4" fill="white" opacity="0.4"/%3E%3Ccircle cx="380" cy="320" r="0.7" fill="white" opacity="0.3"/%3E%3Ccircle cx="45" cy="220" r="1.1" fill="white" opacity="0.2"/%3E%3C/svg%3E');
+      --shadow: rgba(0, 0, 0, 0.5);
+      --pin-color: #333;
+    }
+
+    body.light-mode {
+      --bg: #f5f5f5;
+      --header-bg: #ececec;
+      --panel-bg: #ffffff;
+      --text: #222222;
+      --text-dim: #666;
+      --border: #ccc;
+      --btn-bg: #e5e5e5;
+      --map-void: #f0f0f0;
+      --shadow: rgba(0, 0, 0, 0.1);
+      --pin-color: #ddd;
+    }
+
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #000000;
-      color: #e0e0e0;
+      background-color: var(--bg);
+      color: var(--text);
       padding: 0;
       margin: 0;
       height: 100vh;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
     }
 
     .header-bar {
-      background: #121212;
-      border-bottom: 1px solid #333;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border);
       padding: 10px 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      z-index: 1000;
+      z-index: 5000;
     }
 
     .controls {
@@ -37,14 +64,15 @@
 
     #map {
       flex-grow: 1;
-      background: #000;
+      background: var(--map-void);
+      background-size: 400px 400px;
     }
 
     select,
     button {
-      background-color: #252525;
-      color: #ffffff;
-      border: 1px solid #444;
+      background-color: var(--btn-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
       padding: 5px 15px;
       border-radius: 4px;
       cursor: pointer;
@@ -61,11 +89,13 @@
       position: absolute;
       right: 2px;
       top: 45px;
-      background-color: #1a1a1a;
-      min-width: 200px;
-      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
-      z-index: 1001;
-      border: 1px solid #444;
+      background-color: var(--panel-bg);
+      min-width: 210px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0px 8px 16px var(--shadow);
+      z-index: 3000;
+      border: 1px solid var(--border);
       border-radius: 4px;
       padding: 12px;
     }
@@ -80,9 +110,8 @@
       position: absolute;
       bottom: 25px;
       left: 20px;
-      z-index: 1000;
-      color: white;
-      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      z-index: 500;
+      color: var(--text);
       pointer-events: none;
     }
 
@@ -112,48 +141,56 @@
       width: 250px;
       font-size: 10px;
       font-weight: 600;
-      color: #ccc;
+      color: var(--text-dim);
+    }
+
+    .maplibregl-popup {
+      z-index: 2000 !important;
+      filter: drop-shadow(0 0 1px var(--border)) drop-shadow(0 4px 8px var(--shadow));
     }
 
     .maplibregl-popup-content {
-      background: #1a1a1a !important;
-      color: #fff !important;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+      background: var(--panel-bg) !important;
+      color: var(--text) !important;
+      border: none !important;
       border-radius: 8px !important;
       padding: 10px !important;
     }
 
     .maplibregl-popup-anchor-top .maplibregl-popup-tip {
-      border-bottom-color: #1a1a1a !important;
+      border-bottom-color: var(--panel-bg) !important;
     }
 
     .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
-      border-top-color: #1a1a1a !important;
+      border-top-color: var(--panel-bg) !important;
     }
 
     .maplibregl-popup-anchor-left .maplibregl-popup-tip {
-      border-right-color: #1a1a1a !important;
+      border-right-color: var(--panel-bg) !important;
     }
 
     .maplibregl-popup-anchor-right .maplibregl-popup-tip {
-      border-left-color: #1a1a1a !important;
+      border-left-color: var(--panel-bg) !important;
     }
 
     .maplibregl-popup-anchor-top-left .maplibregl-popup-tip {
-       border-bottom-color: #1a1a1a !important;
+      border-bottom-color: var(--panel-bg) !important;
     }
+
     .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
-       border-bottom-color: #1a1a1a !important;
+      border-bottom-color: var(--panel-bg) !important;
     }
+
     .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip {
-       border-top-color: #1a1a1a !important;
+      border-top-color: var(--panel-bg) !important;
     }
+
     .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
-       border-top-color: #1a1a1a !important;
+      border-top-color: var(--panel-bg) !important;
     }
 
     .maplibregl-popup-close-button {
-      color: #888 !important;
+      color: var(--text-dim) !important;
       font-size: 16px !important;
       right: 2px !important;
       top: 0px !important;
@@ -164,17 +201,16 @@
     }
 
     .maplibregl-popup-close-button:hover {
-      color: #fff !important;
-      background: transparent !important;
+      color: var(--text) !important;
     }
 
     .maplibregl-ctrl-attrib {
-      background: rgba(0, 0, 0, 0.5) !important;
-      color: #aaa !important;
+      background: var(--shadow) !important;
+      color: var(--text-dim) !important;
     }
 
     .maplibregl-ctrl-attrib a {
-      color: #888 !important;
+      color: var(--text-dim) !important;
     }
 
     .setting-row {
@@ -183,17 +219,18 @@
       align-items: center;
       gap: 15px;
       font-size: 11px;
-      color: #aaa;
+      color: var(--text-dim);
     }
 
     .setting-row select,
     .setting-row input {
-      background: #333;
-      color: #fff;
-      border: 1px solid #444;
+      background: var(--btn-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
       border-radius: 3px;
       padding: 2px 5px;
       outline: none;
+      width: 120px;
     }
 
     /* Theme-fitting range slider */
@@ -207,7 +244,7 @@
 
     input[type=range]::-webkit-slider-runnable-track {
       height: 4px;
-      background: #444;
+      background: var(--border);
       border-radius: 2px;
     }
 
@@ -216,14 +253,14 @@
       height: 12px;
       width: 12px;
       border-radius: 50%;
-      background: #aaa;
+      background: var(--text-dim);
       cursor: pointer;
       margin-top: -4px;
-      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 0 5px var(--shadow);
     }
 
     input[type=range]:hover::-webkit-slider-thumb {
-      background: #fff;
+      background: var(--text);
     }
 
     .settings-menu::-webkit-scrollbar {
@@ -246,21 +283,102 @@
       transform: translate(-50%, -50%);
       mix-blend-mode: difference;
     }
-    #nav-crosshair::before, #nav-crosshair::after {
+
+    #nav-crosshair::before,
+    #nav-crosshair::after {
       content: '';
       position: absolute;
       background: #fff;
     }
-    #nav-crosshair::before { top: 50%; left: 0; width: 100%; height: 2px; margin-top: -1px; }
-    #nav-crosshair::after { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
 
-    .maplibregl-canvas { cursor: grab !important; }
-    .grabbing .maplibregl-canvas { cursor: grabbing !important; }
+    #nav-crosshair::before {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      margin-top: -1px;
+    }
+
+    #nav-crosshair::after {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      margin-left: -1px;
+    }
+
+    .maplibregl-canvas {
+      cursor: grab !important;
+    }
+
+    .grabbing .maplibregl-canvas {
+      cursor: grabbing !important;
+    }
 
     .leaflet-tile {
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
       image-rendering: crisp-edges;
+    }
+
+    /* MOBILE OVERRIDES */
+    @media (max-width: 600px) {
+      .header-bar h2 {
+        display: block !important;
+        font-size: 11px !important;
+        line-height: 1.2 !important;
+        white-space: normal !important;
+        width: 60px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase;
+      }
+
+      .source-info {
+        display: none !important;
+      }
+
+      .controls {
+        gap: 5px !important;
+      }
+
+      #era,
+      #compare {
+        width: 85px;
+        padding: 5px 4px;
+        font-size: 10px;
+      }
+
+      .maplibregl-popup {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        transform: none !important;
+        max-width: 100% !important;
+        z-index: 2000 !important;
+      }
+
+      .maplibregl-popup-content {
+        border-radius: 15px 15px 0 0 !important;
+        padding: 15px 10px !important;
+        background: var(--panel-bg) !important;
+        border: none !important;
+      }
+
+      .maplibregl-popup-tip {
+        display: none !important;
+      }
+
+      .legend-container {
+        bottom: auto !important;
+        top: 5px !important;
+        /* Absolute top-left of the map area */
+        left: 5px !important;
+        transform: scale(0.8);
+        transform-origin: top left;
+        pointer-events: none;
+      }
     }
   </style>
 </head>
@@ -269,9 +387,13 @@
   <div id="nav-crosshair"></div>
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 8px;">
-      <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
+      <a href="https://github.com/ioncook/climate-visualizer" target="_blank"
+        style="display: flex; align-items: center;">
+        <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
+      </a>
       <h2 style="margin:0; font-size: 18px; white-space: nowrap;">Climate Visualizer</h2>
-      <div style="display: flex; flex-direction: column; gap: 1px; margin-left: 8px; line-height: 1.1;">
+      <div class="source-info"
+        style="display: flex; flex-direction: column; gap: 1px; margin-left: 8px; line-height: 1.1;">
         <span id="status" style="font-size: 11px; color:#555;">Ready</span>
         <a href="https://github.com/ioncook/climate-visualizer" target="_blank"
           style="font-size: 10px; color: #444; text-decoration: none;">View Source</a>
@@ -291,9 +413,17 @@
         <option value="1961_1990">1961-1990 Averages</option>
         <option value="1991_2020">1991-2020 Averages</option>
       </select>
-      <div class="settings-dropdown">
+      <div class="settings-dropdown" style="display:flex; align-items:center;">
+        <button onclick="window.location.href=window.location.pathname" title="Reset View"
+          style="background:none; border:none; padding: 0 5px; cursor:pointer; display:flex; align-items:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
         <button id="settings-btn"
-          style="background:none; border:none; display:flex; align-items:center; padding: 0 10px; cursor:pointer;"
+          style="background:none; border:none; display:flex; align-items:center; padding: 0 5px; cursor:pointer;"
           onclick="toggleSettings(event)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -304,29 +434,37 @@
           </svg>
         </button>
         <div id="settings-menu" class="settings-content">
-          <label style="font-size: 11px; color:#aaa; margin-bottom: 4px;">Basemap</label>
-          <select id="basemap" style="width:100%;">
-            <option value="dark">Dark Matter</option>
-            <option value="topo">Topography</option>
-            <option value="physical">Physical Map</option>
-            <option value="light">Clean Light Map</option>
-            <option value="osm">Open Street Map</option>
-            <option value="satellite">Satellite</option>
-            <option value="none">None (Plain Black)</option>
-          </select>
-          <hr style="border:0; border-top: 1px solid #333; margin: 8px 0;">
           <div class="setting-row">
-            <span>Units</span>
-            <select id="units">
-              <option value="imperial">Imperial (°F, in)</option>
-              <option value="metric">Metric (°C, mm)</option>
+            <span>Theme</span>
+            <select id="theme">
+              <option value="dark">Dark Mode</option>
+              <option value="light">Light Mode</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <span>Basemap</span>
+            <select id="basemap">
+              <option value="dark">Dark Matter</option>
+              <option value="topo">Topography</option>
+              <option value="light">Clean Light Map</option>
+              <option value="osm">Open Street Map</option>
+              <option value="satellite">Satellite</option>
+              <option value="none">Plain Black</option>
             </select>
           </div>
           <div class="setting-row">
             <span>Projection</span>
             <select id="projection">
-              <option value="globe">3D Globe</option>
-              <option value="mercator">Flat (2D)</option>
+              <option value="globe">Globe</option>
+              <option value="mercator">Flat</option>
+            </select>
+          </div>
+          <hr style="border:0; border-top: 1px solid var(--border); margin: 8px 0;">
+          <div class="setting-row">
+            <span>Units</span>
+            <select id="units">
+              <option value="imperial">Imperial (°F, in)</option>
+              <option value="metric">Metric (°C, mm)</option>
             </select>
           </div>
           <div class="setting-row" id="opacity-row">
@@ -339,7 +477,8 @@
           </div>
           <div class="setting-row">
             <span>3D Exaggeration</span>
-            <input type="number" id="terrain-exaggeration" step="0.1" min="0" max="20" value="2.0" style="width: 60px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; padding:2px 5px;">
+            <input type="number" id="terrain-exaggeration" step="0.1" min="0" max="20" value="2.0"
+              style="width: 60px; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:2px 5px;">
           </div>
         </div>
       </div>
@@ -384,6 +523,21 @@
       29: ["ET", "Polar tundra / Highland"], 30: ["EF", "Polar frost / Ice cap"]
     };
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialLat = parseFloat(urlParams.get('lat')) || 20;
+    const initialLng = parseFloat(urlParams.get('lng')) || 0;
+    const initialZ = parseFloat(urlParams.get('z')) || 1.5;
+
+    const eraSelect = document.getElementById('era');
+    const compareSelect = document.getElementById('compare');
+    const basemapSelect = document.getElementById('basemap');
+    const unitsSelect = document.getElementById('units');
+    const opacitySlider = document.getElementById('layer-opacity');
+    const projectionSelect = document.getElementById('projection');
+
+    if (urlParams.get('era')) eraSelect.value = urlParams.get('era');
+    if (urlParams.get('comp')) compareSelect.value = urlParams.get('comp');
+
     const map = new maplibregl.Map({
       container: 'map',
       style: {
@@ -391,15 +545,15 @@
         sources: {},
         layers: []
       },
-      center: [0, 20],
-      zoom: 1.5,
+      center: [initialLng, initialLat],
+      zoom: initialZ,
       maxZoom: 11,
       pixelRatio: Math.min(window.devicePixelRatio, 2),
       projection: 'globe',
-      antialias: true,
+      antialias: false,
       collectResourceTiming: false,
       attributionControl: true,
-      
+
       // OPTIMIZATION: Silence 404s for missing ocean/land tiles
       transformRequest: (url, resourceType) => {
         if (resourceType === 'Tile' && (url.includes('tiles_koppen') || url.includes('compare'))) {
@@ -428,17 +582,31 @@
       satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Earthstar Geographics' }
     };
 
-    const basemapSelect = document.getElementById('basemap');
-    const unitsSelect = document.getElementById('units');
-    const opacitySlider = document.getElementById('layer-opacity');
-    const eraSelect = document.getElementById('era');
-    const compareSelect = document.getElementById('compare');
-    const projectionSelect = document.getElementById('projection');
-
+    // Elements are dynamically bound above via map initialization.
     // Single source of truth: dropdown values.
     // We will initialize them from localStorage if available in loadStoredSettings()
 
     let currentBasemapId = 'dark';
+    let lastQueryData = null;
+    const urlParamsForState = new URLSearchParams(window.location.search);
+    let lastLatLng = (urlParamsForState.get('plat') && urlParamsForState.get('plng')) ?
+      { lat: parseFloat(urlParamsForState.get('plat')), lng: parseFloat(urlParamsForState.get('plng')) } : null;
+
+    let lockedTooltipCoords = "";
+    let currentMarker = null;
+    if (lastLatLng) {
+      const latAbs = Math.abs(lastLatLng.lat).toFixed(2);
+      const lngAbs = Math.abs(lastLatLng.lng).toFixed(2);
+      const latDir = lastLatLng.lat >= 0 ? 'N' : 'S';
+      const lngDir = lastLatLng.lng >= 0 ? 'E' : 'W';
+      lockedTooltipCoords = `
+          <div style="text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); window.open('https://www.google.com/maps?q=${lastLatLng.lat},${lastLatLng.lng}', '_blank');">
+            <div>${latAbs}° ${latDir}</div>
+            <div>${lngAbs}° ${lngDir}</div>
+          </div>
+      `;
+    }
+    let isPopupOpen = urlParamsForState.get('p') === '1' && lastLatLng !== null;
 
     function setupBasemap(id) {
       if (id === 'none') {
@@ -488,7 +656,8 @@
       } else {
         map.setProjection({ type: 'mercator' });
         map.setPitch(0);
-        map.dragRotate.disable();
+        map.setBearing(0);
+        map.dragRotate.enable();
         map.setTerrain(null);
       }
       updateLayers();
@@ -547,10 +716,10 @@
           id: 'data-layer',
           type: 'raster',
           source: 'data-source',
-          paint: { 
-            'raster-opacity': 0.75, 
+          paint: {
+            'raster-opacity': 0.75,
             'raster-resampling': 'nearest',
-            'raster-fade-duration': 0 
+            'raster-fade-duration': 0
           }
         }, 'top-anchor');
       }
@@ -562,7 +731,8 @@
       } else {
         map.setProjection({ type: 'mercator' });
         map.setPitch(0);
-        map.dragRotate.disable();
+        map.setBearing(0);
+        map.dragRotate.enable();
       }
 
       // 3D RELIEF (Hillshade & Geometry) 
@@ -575,7 +745,7 @@
           'maxzoom': 14
         });
       }
-      
+
       // Separate source for hillshade to avoid console warnings
       if (!map.getSource('hillshade-source')) {
         map.addSource('hillshade-source', {
@@ -593,33 +763,44 @@
           id: 'hillshade-layer',
           type: 'hillshade',
           source: 'hillshade-source',
-          paint: { 
+          paint: {
             'hillshade-exaggeration': 0.4,
             'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
             'hillshade-highlight-color': 'rgba(255,255,255,0.1)'
           }
         }, 'top-anchor');
       }
-      
+
       const storedHill = localStorage.getItem('climate_hillshade') === 'true'; // Default to OFF
       const viz = storedHill ? 'visible' : 'none';
       if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
       document.getElementById('hillshade-check').checked = storedHill;
 
-      if (storedHill) {
+      if (storedHill && proj === 'globe') {
         map.setPitch(45);
         const exVal = parseFloat(localStorage.getItem('climate_exaggeration')) || 2.0;
         map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
         document.getElementById('terrain-exaggeration').value = exVal;
+      } else {
+        map.setPitch(0);
+        map.setBearing(0);
+        map.setTerrain(null);
       }
-
-
       updateLayers();
+
+      const params = new URLSearchParams(window.location.search);
+      const plat = parseFloat(params.get('plat'));
+      const plng = parseFloat(params.get('plng'));
+      if (!isNaN(plat) && !isNaN(plng) && params.get('p') === '1') {
+        isPopupOpen = true; // Force state to true for restoration
+        // Fire on the next frame to prevent any potential internal DOM sync crashes 
+        requestAnimationFrame(() => queryLocation(plat, plng));
+      }
     });
 
     // STATIC PRE-GENERATED CHUNKS (Relative to selected Era)
-    let currentMonth = "12"; // Default to annual
-    let currentLayerType = 'koppen';
+    let currentMonth = new URLSearchParams(window.location.search).get('m') || "12"; // Default to annual
+    let currentLayerType = new URLSearchParams(window.location.search).get('layer') || 'koppen';
 
     // Layer state is managed via MapLibre sources/layers directly in updateLayers()
 
@@ -636,7 +817,7 @@
       localStorage.setItem('climate_hillshade', show);
       const viz = show ? 'visible' : 'none';
       if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
-      
+
       if (show) {
         map.setPitch(45);
         const exVal = parseFloat(document.getElementById('terrain-exaggeration').value) || 2.0;
@@ -663,6 +844,31 @@
       terrainExInput.value = val.toFixed(1);
       terrainExInput.dispatchEvent(new Event('change'));
     });
+
+    function syncUrl() {
+      if (!map) return;
+      const center = map.getCenter();
+      const zoom = map.getZoom().toFixed(2);
+      const params = new URLSearchParams(window.location.search);
+      params.set('lat', center.lat.toFixed(4));
+      params.set('lng', center.lng.toFixed(4));
+      params.set('z', zoom);
+      params.set('layer', currentLayerType);
+      params.set('m', currentMonth);
+      params.set('era', eraSelect.value);
+      params.set('comp', compareSelect.value);
+
+      if (isPopupOpen && lastLatLng) {
+        params.set('plat', lastLatLng.lat.toFixed(4));
+        params.set('plng', lastLatLng.lng.toFixed(4));
+        params.set('p', '1');
+      } else {
+        params.delete('plat');
+        params.delete('plng');
+        params.delete('p');
+      }
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
 
     function updateLayers() {
       // Don't return if !map.loaded(); we want the latest setting to be queued/applied as soon as possible.
@@ -737,6 +943,8 @@
       } else if (source) {
         map.setLayoutProperty('data-layer', 'visibility', 'none');
       }
+
+      syncUrl();
     }
 
     function updateLegend(type, isCompare) {
@@ -804,6 +1012,7 @@
         }
       } else if (type === 'precip_max' || type === 'precip_min') {
         titleEl.innerText = type === 'precip_max' ? "Wettest Month" : "Driest Month";
+
         contentEl.innerHTML = `
           <div class="gradient-bar" style="background: linear-gradient(to right, #ff00ff, #0000ff, #00ff00, #ffff00, #ff0000);"></div>
           <div class="legend-labels"><span>Jan</span><span>Jul</span><span>Dec</span></div>
@@ -814,9 +1023,14 @@
     // Initial load
     updateLayers();
 
-    let isPopupOpen = false;
-    map.on('popupopen', () => { isPopupOpen = true; });
-    map.on('popupclose', () => { isPopupOpen = false; });
+    map.on('moveend', syncUrl);
+
+    map.on('popupopen', () => { isPopupOpen = true; syncUrl(); });
+    map.on('popupclose', () => {
+      isPopupOpen = false;
+      if (window.currentMarker) window.currentMarker.remove();
+      syncUrl();
+    });
 
     function maybeRefresh() {
       if (window.currentPopup && window.currentPopup.isOpen() && lastLatLng) {
@@ -878,6 +1092,13 @@
 
     // LOAD SAVED SETTINGS
     function loadStoredSettings() {
+      const storedTheme = localStorage.getItem('climate_theme');
+      if (storedTheme) {
+        document.getElementById('theme').value = storedTheme;
+        if (storedTheme === 'light') document.body.classList.add('light-mode');
+        else document.body.classList.remove('light-mode');
+      }
+
       const storedBasemap = localStorage.getItem('climate_basemap');
       const storedUnits = localStorage.getItem('climate_units');
       const storedOpacity = localStorage.getItem('climate_opacity');
@@ -905,9 +1126,24 @@
           map.dragRotate.disable();
         }
       }
-      
-      const storedNav = localStorage.getItem('climate_nav') === 'true'; 
+
+      const storedHill = localStorage.getItem('climate_hillshade') === 'true';
+      document.getElementById('hillshade-check').checked = storedHill;
+
+      const storedExag = localStorage.getItem('climate_exaggeration');
+      if (storedExag) {
+        document.getElementById('terrain-exaggeration').value = storedExag;
+      }
     }
+
+    const themeSelect = document.getElementById('theme');
+    themeSelect.addEventListener('change', () => {
+      const val = themeSelect.value;
+      if (val === 'light') document.body.classList.add('light-mode');
+      else document.body.classList.remove('light-mode');
+      localStorage.setItem('climate_theme', val);
+      if (isPopupOpen) updatePopup();
+    });
 
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
@@ -951,18 +1187,104 @@
       // Map 0-500mm to HSL 0-270 (Red to Purple) to match map legend (power curve 0.7)
       let clamped = Math.max(0, Math.min(500, p));
       let curve = Math.pow(clamped / 500, 0.7);
-      let hue = 270 * curve; 
+      let hue = 270 * curve;
       return `hsl(${hue}, 100%, 65%)`;
     }
 
-    let lastQueryData = null;
-    let lastLatLng = null;
-    let lockedTooltipCoords = "";
+
+    // TREWARTHA CLIMATE CLASSIFICATION (1966)
+    function getTrewartha(t, p, lat) {
+      if (!t || !p) return { code: "N/A" };
+      const annT = t.reduce((a, b) => a + b, 0) / 12;
+      const annP = p.reduce((a, b) => a + b, 0);
+      const isNorth = lat >= 0;
+
+      const summerIdx = isNorth ? [3, 4, 5, 6, 7, 8] : [0, 1, 2, 9, 10, 11];
+      const winterIdx = isNorth ? [0, 1, 2, 9, 10, 11] : [3, 4, 5, 6, 7, 8];
+      const pSum = summerIdx.reduce((a, i) => a + p[i], 0);
+      const pWin = winterIdx.reduce((a, i) => a + p[i], 0);
+      const pw = (pWin / Math.max(1, annP)) * 100;
+
+      const maxT = Math.max(...t);
+      const minT = Math.min(...t);
+      const maxIdx = t.indexOf(maxT);
+      const minIdx = t.indexOf(minT);
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const warmMonth = monthNames[maxIdx];
+      const coldMonth = monthNames[minIdx];
+
+      // Universal Thermal Scale (Warmest Month, Coldest Month)
+      function getThermalInfo(temp) {
+        if (temp >= 35) return { l: 'i', w: 'Severely Hot' };
+        if (temp >= 28) return { l: 'h', w: 'Very Hot' };
+        if (temp >= 22.2) return { l: 'a', w: 'Hot' };
+        if (temp >= 18) return { l: 'b', w: 'Warm' };
+        if (temp >= 10) return { l: 'l', w: 'Mild' };
+        if (temp >= 0.1) return { l: 'k', w: 'Cool' };
+        if (temp > -10) return { l: 'o', w: 'Cold' };
+        if (temp >= -24.9) return { l: 'c', w: 'Very Cold' };
+        if (temp >= -39.9) return { l: 'd', w: 'Severely Cold' };
+        return { l: 'e', w: 'Excessively Cold' };
+      }
+      const warmInfo = getThermalInfo(maxT);
+      const coldInfo = getThermalInfo(minT);
+      const thermalSub = warmInfo.l + coldInfo.l;
+      const coldDesc = coldInfo.w;
+      const warmDesc = warmInfo.w;
+
+      const R_cm = 2.3 * annT - 0.64 * pw + 41;
+      const R_mm = R_cm * 10;
+
+      if (annP < R_mm) {
+        const type = annP < R_mm / 2 ? "Bw" : "Bs";
+        return { code: type + thermalSub, coldDesc, warmDesc, coldMonth, warmMonth };
+      }
+
+      const m10 = t.filter(v => v >= 10).length;
+      let group = "";
+
+      if (t.every(v => v >= 18)) {
+        group = "A";
+      } else if (m10 >= 8) {
+        group = "C";
+      } else if (m10 >= 4) {
+        group = "D";
+      } else if (m10 >= 1) {
+        group = "E";
+      } else {
+        return { code: (maxT > 0 ? "Ft" : "Fi") + thermalSub, coldDesc, warmDesc, coldMonth, warmMonth };
+      }
+
+      let sub = "";
+      const pMin = Math.min(...p);
+      const sMin = Math.min(...summerIdx.map(i => p[i]));
+      const wMin = Math.min(...winterIdx.map(i => p[i]));
+      const sMax = Math.max(...summerIdx.map(i => p[i]));
+      const wMax = Math.max(...winterIdx.map(i => p[i]));
+
+      if (group === "A") {
+        if (pMin >= 60) sub = "r";
+        else if (sMax >= 10 * wMin) sub = "w";
+        else if (wMax >= 10 * sMin) sub = "s";
+        else sub = "m";
+      } else if (group === "C") {
+        if (wMax >= 3 * sMin && sMin < 40) sub = "s";
+        else if (sMax >= 3 * wMin && wMin < 40) sub = "w";
+        else sub = "f";
+      } else if (group === "D") {
+        sub = minT > 0 ? "o" : "c";
+      } else if (group === "E") {
+        sub = minT > -10 ? "o" : "c";
+      }
+
+      return { code: group + sub + thermalSub, coldDesc, warmDesc, coldMonth, warmMonth };
+    }
 
     function updatePopup() {
       if (!lastQueryData || !lastLatLng) return;
       const { d1, d2, isCompare, era, compareEra } = lastQueryData;
       const latlng = lastLatLng;
+      const tre = getTrewartha(d1.t, d1.p, latlng.lat);
 
       const info1 = LEGENDS[d1.i] || ["Unk", "Unknown"];
       const info2 = isCompare ? (LEGENDS[d2.i] || ["Unk", "Unknown"]) : null;
@@ -976,34 +1298,44 @@
       const totalP2 = isCompare ? d2.p.reduce((acc, curr) => acc + curr, 0) : null;
       const avgT2 = isCompare ? d2.t.reduce((acc, curr) => acc + curr, 0) / d2.t.length : null;
 
-      let html = `<div style="min-width: 280px; font-family: inherit; color: #eee; padding-top: 5px;">`;
+      let html = `<div style="min-width: 280px; font-family: inherit; color: var(--text);">`;
 
       // 1. KOPPEN HEADER
       const coordHtml = lockedTooltipCoords;
 
       if (isCompare) {
         html += `
-          <div style="font-weight:700; border-bottom:1px solid #444; padding-bottom:8px; margin-bottom:8px; display: flex; align-items: flex-start; cursor: pointer;" onclick="setLayer('koppen')">
-            <div style="display: flex; align-items: center; margin-top: 2px;">
-              <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info1[0]}</span>
-              <span style="margin: 0 10px; color: #888;">&rarr;</span>
-              <span style="background:${COLORS[d2.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info2[0]}</span>
+          <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:5px; display: flex; align-items: center;">
+            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+              <div style="display: flex; align-items: center;">
+                <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px; text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[0]}</span>
+                <span style="margin: 0 10px; color: var(--text-dim);">&rarr;</span>
+                <span style="background:${COLORS[d2.i]}; color:#000; padding:2px 6px; border-radius:3px; text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info2[0]}</span>
+              </div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">
+                ${tre.code} - <span style="color:#8da0cf">${tre.coldDesc}</span> <span style="color:var(--text-dim);">(${tre.coldMonth})</span> to <span style="color:#f1948a">${tre.warmDesc}</span> <span style="color:var(--text-dim);">(${tre.warmMonth})</span>
+              </div>
             </div>
-            <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
+            <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2; align-self: center; margin-top: 2px;">
               ${coordHtml}
-              <div style="color:#888;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+              <div style="color:var(--text-dim);">Elev: ${lastQueryData.elevation || 'N/A'}${(lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
             </div>
           </div>`;
       } else {
         html += `
-          <div style="font-weight:700; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:8px; display: flex; align-items: flex-start; cursor: pointer;" onclick="setLayer('koppen')">
-            <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
-               <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px;">${info1[0]}</span>
-               <span style="margin-top: 1px;">${info1[1]}</span>
+          <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:5px; display: flex; align-items: center;">
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
+               <div style="display: flex; align-items: center; gap: 8px;">
+                 <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px; text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[0]}</span>
+                 <span style="margin-top: 1px; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[1]}</span>
+               </div>
+               <div style="font-size: 10px; color: var(--text-dim);">
+                 ${tre.code} - <span style="color:#8da0cf">${tre.coldDesc}</span> <span style="color:var(--text-dim);">(${tre.coldMonth})</span> to <span style="color:#f1948a">${tre.warmDesc}</span> <span style="color:var(--text-dim);">(${tre.warmMonth})</span>
+               </div>
             </div>
-            <div style="text-align: right; font-size: 10px; color: #888; margin-left: auto; line-height: 1.2;">
+            <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2; align-self: center; margin-top: 2px;">
               ${coordHtml}
-              <div style="color:#888;">Elev: ${lastQueryData.elevation || 'N/A'}${ (lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+              <div style="color:var(--text-dim);">Elev: ${lastQueryData.elevation || 'N/A'}${(lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
             </div>
           </div>`;
       }
@@ -1019,13 +1351,13 @@
         html += `
           <div style="display: flex; justify-content: space-around; padding: 10px 0; text-align: center;">
             <div style="cursor: pointer;" onclick="setLayer('temp', 12)">
-              <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">TEMP CHANGE</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-bottom: 4px;">TEMP CHANGE</div>
               <div style="font-size: 18px; font-weight: bold; color: ${tColor};">
                 ${dT > 0 ? '+' : ''}${isMetric ? dT.toFixed(1) : (dT * 1.8).toFixed(1)}°
               </div>
             </div>
             <div style="cursor: pointer;" onclick="setLayer('precip', 12)">
-              <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">PRECIP CHANGE</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-bottom: 4px;">PRECIP CHANGE</div>
               <div style="font-size: 18px; font-weight: bold; color: ${pColor};">
                 ${dP > 0 ? '+' : ''}${dP.toFixed(1)}%
               </div>
@@ -1043,39 +1375,45 @@
         const maxIdx = d1.p.indexOf(maxP);
         const minIdx = d1.p.indexOf(minP);
 
+        // Find min/max indices for modern temp
+        const maxT = Math.max(...d1.t);
+        const minT = Math.min(...d1.t);
+        const tMaxIdx = d1.t.indexOf(maxT);
+        const tMinIdx = d1.t.indexOf(minT);
+
         html += `
           <table style="width:100%; font-size:11px; border-collapse:collapse; text-align:center;">
-            <tr style="color:#aaa; border-bottom:1px solid #333;">
+            <tr style="color:var(--text-dim); border-bottom:1px solid var(--border);">
               <td style="text-align:left; font-weight:bold; padding:2px 0;"></td>
               ${months.map((m, i) => {
           let style = "";
-          let click = isModern ? `setLayer('temp', ${i})` : ""; 
+          let click = isModern ? `setLayer('temp', ${i})` : "";
           let cursor = isModern ? "cursor:pointer" : "cursor:default";
-          
-          if (i === maxIdx) { style = "color:#8da0cf; text-decoration:underline;"; click = `setLayer('precip_max')`; cursor = "cursor:pointer"; }
-          else if (i === minIdx) { style = "color:#f1948a; text-decoration:underline;"; click = `setLayer('precip_min')`; cursor = "cursor:pointer"; }
-          
+
+          if (i === maxIdx) { style = `color:#8da0cf;${isModern ? ' text-decoration:underline;' : ''}`; click = isModern ? `setLayer('precip_max')` : ""; cursor = isModern ? "cursor:pointer" : "cursor:default"; }
+          else if (i === minIdx) { style = `color:#f1948a;${isModern ? ' text-decoration:underline;' : ''}`; click = isModern ? `setLayer('precip_min')` : ""; cursor = isModern ? "cursor:pointer" : "cursor:default"; }
+
           return `<td style="padding: 0 2px; ${cursor}; ${style}" onclick="${click}">${m}</td>`;
         }).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; padding-left: 4px;">Year</td>
+              <td style="border-left: 1px solid var(--border); font-weight: bold; padding-left: 4px;">Year</td>
             </tr>
             <tr style="cursor: pointer;" onclick="setLayer('temp', 12)">
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">T°</td>
+              <td style="text-align:left; color:var(--text-dim); font-weight:bold; padding:2px 0;">T°</td>
               ${d1.t.map((t, i) => {
           const decoration = isModern ? "text-decoration: underline; cursor: pointer;" : "cursor: default;";
           const click = isModern ? `event.stopPropagation(); setLayer('temp', ${i})` : "event.stopPropagation();";
           return `<td style="color:${getTempColor(t)}; font-weight:bold; ${decoration}" onclick="${click}">${isMetric ? Math.round(t) : Math.round(t * 1.8 + 32)}</td>`;
         }).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; text-decoration: underline; cursor: pointer; color:${getTempColor(avgT1)};" onclick="event.stopPropagation(); setLayer('temp', 12)">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
+              <td style="border-left: 1px solid var(--border); font-weight: bold; text-decoration: underline; cursor: pointer; color:${getTempColor(avgT1)};" onclick="event.stopPropagation(); setLayer('temp', 12)">${isMetric ? Math.round(avgT1) : Math.round(avgT1 * 1.8 + 32)}</td>
             </tr>
             <tr style="cursor: pointer;" onclick="setLayer('precip', 12)">
-              <td style="text-align:left; color:#aaa; font-weight:bold; padding:2px 0;">P</td>
+              <td style="text-align:left; color:var(--text-dim); font-weight:bold; padding:2px 0;">P</td>
               ${d1.p.map((p, i) => {
           const decoration = isModern ? "text-decoration: underline; cursor: pointer;" : "cursor: default;";
           const click = isModern ? `event.stopPropagation(); setLayer('precip', ${i})` : "event.stopPropagation();";
           return `<td style="color:${getPrecipColor(p)}; font-weight:bold; ${decoration}" onclick="${click}">${isMetric ? Math.round(p) : (p / 25.4).toFixed(1)}</td>`;
         }).join('')}
-              <td style="border-left: 1px solid #444; font-weight: bold; text-decoration: underline; cursor: pointer; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
+              <td style="border-left: 1px solid var(--border); font-weight: bold; text-decoration: underline; cursor: pointer; color:${getPrecipColor(totalP1 / 12)};" onclick="event.stopPropagation(); setLayer('precip', 12)">${isMetric ? Math.round(totalP1) : (totalP1 / 25.4).toFixed(1)}</td>
             </tr>
           </table>
         `;
@@ -1096,6 +1434,27 @@
           .setHTML(html)
           .addTo(map);
       }
+
+      // Update Marker position with custom 'pin' shaped element (Mobile Only)
+      if (window.currentMarker) window.currentMarker.remove();
+
+      if (window.innerWidth < 600) {
+        const el = document.createElement('div');
+        // Ensure no clipping by giving container enough space
+        el.style.width = '24px';
+        el.style.height = '34px';
+        el.innerHTML = `
+          <svg width="24" height="34" viewBox="0 -1 24 33" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="var(--pin-color)" fill-rule="evenodd" />
+          </svg>
+        `;
+
+        window.currentMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([latlng.lng, latlng.lat])
+          .addTo(map);
+      }
+
+      syncUrl();
     }
 
     const queryCache = {};
@@ -1108,7 +1467,7 @@
         if (!res.ok) return null;
         queryCache[url] = await res.json();
         return queryCache[url];
-      } catch(e) { return null; }
+      } catch (e) { return null; }
     }
 
     function decodeRle(rle, px, py) {
@@ -1151,12 +1510,12 @@
       const map_size = 256 * Math.pow(2, 7);
       let x_norm = (wrappedLng + 180) / 360;
       let y_norm = 0.5 - (Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI / 180) / 2)) / (2 * Math.PI));
-      
+
       let px = Math.floor(x_norm * map_size);
       let py = Math.floor(y_norm * map_size);
-      
+
       if (py < 0 || py >= map_size) return;
-      
+
       let tileX = Math.floor(px / 256);
       let tileY = Math.floor(py / 256);
       let pixelX = px % 256;
@@ -1180,7 +1539,7 @@
         ]);
 
         if (signal.aborted) return;
-        
+
         const kid1 = decodeRle(rle1, pixelX, pixelY);
         const kid2 = isComp ? decodeRle(rle2, pixelX, pixelY) : 0;
         const d1_raw = grid1 ? grid1[`${gridY}_${gridX}`] : null;
@@ -1199,7 +1558,7 @@
           isCompare: isComp && d2_raw,
           era: eraSelect.value,
           compareEra: compareSelect.value,
-          elevation: "---" 
+          elevation: "---"
         };
         document.getElementById('status').innerText = isComp ? "Comparison Data Ready" : "Data Ready";
         updatePopup();
@@ -1207,12 +1566,12 @@
         // 2. Fetch Elevation (Remote) in background with Cache and Timeout
         const elevKey = `${clampedLat.toFixed(3)}_${wrappedLng.toFixed(3)}`;
         if (window.elevCache && window.elevCache[elevKey]) {
-           lastQueryData.elevation = window.elevCache[elevKey];
-           updatePopup();
+          lastQueryData.elevation = window.elevCache[elevKey];
+          updatePopup();
         } else {
           if (!window.elevCache) window.elevCache = {};
           const elevUrl = `https://api.open-meteo.com/v1/elevation?latitude=${clampedLat}&longitude=${wrappedLng}`;
-          
+
           // Timeout to prevent "---" hanging forever
           const timeoutId = setTimeout(() => {
             if (lastQueryData && lastQueryData.elevation === "---") {
@@ -1266,17 +1625,19 @@
       const lngDir = wrappedLng >= 0 ? 'E' : 'W';
 
       lockedTooltipCoords = `
-          <div>${latAbs}° ${latDir}</div>
-          <div>${lngAbs}° ${lngDir}</div>
+          <div style="text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); window.open('https://www.google.com/maps?q=${clampedLat},${wrappedLng}', '_blank');">
+            <div>${latAbs}° ${latDir}</div>
+            <div>${lngAbs}° ${lngDir}</div>
+          </div>
       `;
       // CRITICAL: only update the storage on click!
       lastLatLng = { lat: clampedLat, lng: wrappedLng };
+      isPopupOpen = true; // Ensure state is correct before sync
+      syncUrl();
       queryLocation(lat, lng);
     });
 
     // Popup open/close tracking
-    map.on('popupopen', () => { isPopupOpen = true; });
-    map.on('popupclose', () => { isPopupOpen = false; });
 
     // Double right-click to reset tilt/pitch
     let lastRightClickTime = 0;
@@ -1302,7 +1663,7 @@
       document.body.classList.add('grabbing');
       if (e.button === 1) { // Middle Click
         e.preventDefault();
-        
+
         if (isNavActive) {
           middleStartTime = Date.now();
           middleStartPos = { x: e.clientX, y: e.clientY };
@@ -1321,7 +1682,7 @@
         const pivot = map.unproject(screenP);
         const isOnGlobe = !isNaN(pivot.lng) && !isNaN(pivot.lat);
         middleStartLlngLat = isOnGlobe ? pivot : null;
-        
+
         crosshair.style.left = e.clientX + 'px';
         crosshair.style.top = e.clientY + 'px';
         crosshair.style.display = 'block';
@@ -1342,9 +1703,9 @@
       if (e.button === 1 && isNavActive) {
         const timeElapsed = Date.now() - middleStartTime;
         if (isDragging || timeElapsed > 300 || (timeElapsed < 300 && isDragging === false && Date.now() - middleStartTime > 0)) {
-           isNavActive = false;
-           crosshair.style.display = 'none';
-           cancelAnimationFrame(navAnimationId);
+          isNavActive = false;
+          crosshair.style.display = 'none';
+          cancelAnimationFrame(navAnimationId);
         }
       } else if (e.button === 0 && isNavActive) {
         isNavActive = false;
@@ -1365,9 +1726,9 @@
         dx = 0; dy = 0;
       } else {
         // If movement is primarily vertical, lock horizontal to zero
-        if (Math.abs(dy) > Math.abs(dx) * 1.28) dx = 0;
+        if (Math.abs(dy) > Math.abs(dx) * 10.0) dx = 0;
         // If movement is primarily horizontal, lock vertical to zero
-        else if (Math.abs(dx) > Math.abs(dy) * 1.28) dy = 0;
+        else if (Math.abs(dx) > Math.abs(dy) * 10.0) dy = 0;
       }
 
       if (dx !== 0 || dy !== 0) {
@@ -1386,19 +1747,26 @@
           const rect = map.getCanvas().getBoundingClientRect();
           const pivotScreenX = middleStartPos.x - rect.left;
           const pivotScreenY = middleStartPos.y - rect.top;
-          
+
           const currentPivotPos = map.project(middleStartLlngLat);
           const offsetX = currentPivotPos.x - pivotScreenX;
           const offsetY = currentPivotPos.y - pivotScreenY;
-          
-          // STABILIZATION: Fade out the correction at low zooms to avoid "pulling" artifacts
-          // When zoomed out far (globe view), perfect locking causes perspective drift.
+
+          // STABILIZATION: Fade out the correction at extremely low zooms
           const z = map.getZoom();
           let weight = 1.0;
-          if (z < 4) weight = Math.max(0, (z - 2.5) / 1.5);
-          
+          if (z < 3) weight = Math.max(0, (z - 1.0) / 2.0);
+
           if (weight > 0) {
-            map.panBy([offsetX * weight, offsetY * weight], { duration: 0 });
+            // JITTER GUARD: Near 3D terrain, tiny point shifts can cause huge camera jumps.
+            // We apply damping (0.8) and a distance cap (50px) to keep things smooth.
+            const dampedX = offsetX * 0.8 * weight;
+            const dampedY = offsetY * 0.8 * weight;
+
+            // Only apply if the jump isn't absurdly large (which implies a mesh glitch)
+            if (Math.abs(dampedX) < 50 && Math.abs(dampedY) < 50) {
+              map.panBy([dampedX, dampedY], { duration: 0 });
+            }
           }
         }
       }
@@ -1413,4 +1781,5 @@
     });
   </script>
 </body>
+
 </html>
