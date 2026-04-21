@@ -371,11 +371,53 @@
     }
 
     .maplibregl-canvas {
-      cursor: grab !important;
+      cursor: grab;
     }
 
-    .grabbing .maplibregl-canvas {
-      cursor: grabbing !important;
+    body.grabbing,
+    body.grabbing .maplibregl-canvas {
+      cursor: grabbing;
+    }
+
+    /* Directional Nav Cursors */
+    body.nav-n,
+    body.nav-n .maplibregl-canvas {
+      cursor: n-resize !important;
+    }
+
+    body.nav-ne,
+    body.nav-ne .maplibregl-canvas {
+      cursor: ne-resize !important;
+    }
+
+    body.nav-e,
+    body.nav-e .maplibregl-canvas {
+      cursor: e-resize !important;
+    }
+
+    body.nav-se,
+    body.nav-se .maplibregl-canvas {
+      cursor: se-resize !important;
+    }
+
+    body.nav-s,
+    body.nav-s .maplibregl-canvas {
+      cursor: s-resize !important;
+    }
+
+    body.nav-sw,
+    body.nav-sw .maplibregl-canvas {
+      cursor: sw-resize !important;
+    }
+
+    body.nav-w,
+    body.nav-w .maplibregl-canvas {
+      cursor: w-resize !important;
+    }
+
+    body.nav-nw,
+    body.nav-nw .maplibregl-canvas {
+      cursor: nw-resize !important;
     }
 
     .leaflet-tile {
@@ -1816,8 +1858,10 @@
       // Complete lockout for mobile screens to eliminate any possibility of touch interference
       if (window.innerWidth < 600) return;
 
+      // Add grabby hand for all buttons
+      document.body.classList.add('grabbing');
+
       if (e.button === 1 && e.pointerType !== 'touch') {
-        document.body.classList.add('grabbing');
         e.preventDefault();
 
         if (isNavActive) {
@@ -1851,13 +1895,32 @@
     window.addEventListener('pointermove', (e) => {
       if (isNavActive) {
         middleCurrentPos = { x: e.clientX, y: e.clientY };
-        const dist = Math.hypot(e.clientX - middleStartPos.x, e.clientY - middleStartPos.y);
-        if (dist > 10) isDragging = true;
+        const dx = e.clientX - middleStartPos.x;
+        const dy = e.clientY - middleStartPos.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Remove all old directional classes
+        const directions = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+        directions.forEach(d => document.body.classList.remove('nav-' + d));
+
+        if (dist > 10) {
+          isDragging = true;
+          const ax = Math.abs(dx), ay = Math.abs(dy);
+          let dir = '';
+          if (ay > ax * 1.8) dir = dy > 0 ? 's' : 'n';
+          else if (ax > ay * 1.8) dir = dx > 0 ? 'e' : 'w';
+          else {
+            if (dx > 0) dir = dy > 0 ? 'se' : 'ne';
+            else dir = dy > 0 ? 'sw' : 'nw';
+          }
+          document.body.classList.add('nav-' + dir);
+        }
       }
     });
 
     window.addEventListener('pointerup', (e) => {
       document.body.classList.remove('grabbing');
+      ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d));
       if (e.button === 1 && isNavActive) {
         const timeElapsed = Date.now() - middleStartTime;
         if (isDragging || timeElapsed > 300) {
@@ -1868,8 +1931,14 @@
         isNavActive = false;
         crosshair.style.display = 'none';
       }
+      
+      if (!isNavActive) {
+        ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d));
+        currentNavDir = '';
+      }
     });
 
+    let currentNavDir = '';
     map.on('render', () => {
       if (!isNavActive) return;
 
@@ -1880,8 +1949,26 @@
       if (Math.abs(dx) < deadzone && Math.abs(dy) < deadzone) {
         dx = 0; dy = 0;
       } else {
+        // AXIAL LOCK: If the drift is within a 10:1 ratio, lock it to a single axis.
         if (Math.abs(dy) > Math.abs(dx) * 10.0) dx = 0;
         else if (Math.abs(dx) > Math.abs(dy) * 10.0) dy = 0;
+      }
+
+      // SYNCED DYNAMIC CURSOR: Must match the axial lock math above.
+      let nextDir = '';
+      if (dx !== 0 || dy !== 0) {
+        if (dx === 0) nextDir = dy > 0 ? 's' : 'n';
+        else if (dy === 0) nextDir = dx > 0 ? 'e' : 'w';
+        else {
+          if (dx > 0) nextDir = dy > 0 ? 'se' : 'ne';
+          else nextDir = dy > 0 ? 'sw' : 'nw';
+        }
+      }
+
+      if (nextDir !== currentNavDir) {
+        ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d));
+        if (nextDir) document.body.classList.add('nav-' + nextDir);
+        currentNavDir = nextDir;
       }
 
       // HIGH-INERTIA INPUT: 80% smoothing adds "weight" to the camera, 
@@ -1890,8 +1977,11 @@
       navSmoothY = navSmoothY * 0.8 + dy * 0.2;
 
       if (navSmoothX !== 0 || navSmoothY !== 0) {
+        // Clamp zoom to a minimum of 1.5 to prevent zooming into the void
+        const targetZoom = Math.max(1.5, map.getZoom() + (-navSmoothY * 0.0005));
+
         map.jumpTo({
-          zoom: map.getZoom() + (-navSmoothY * 0.0005),
+          zoom: targetZoom,
           bearing: map.getBearing() + (navSmoothX * 0.012)
         });
 
@@ -1904,21 +1994,25 @@
           if (!smoothedProj) {
             smoothedProj = { x: rawProj.x, y: rawProj.y };
           } else {
-            smoothedProj.x = smoothedProj.x * 0.5 + rawProj.x * 0.5;
-            smoothedProj.y = smoothedProj.y * 0.5 + rawProj.y * 0.5;
+            // ADAPTIVE SMOOTHING: Ramp up damping during rotation to kill mesh shift,
+            // but stay responsive during zoom.
+            const rotStr = Math.min(0.3, Math.abs(navSmoothX) * 0.01);
+            const k = 0.5 + rotStr; // Blend ranges from 0.5 to 0.8
+            smoothedProj.x = smoothedProj.x * k + rawProj.x * (1 - k);
+            smoothedProj.y = smoothedProj.y * k + rawProj.y * (1 - k);
           }
 
-          // DAMPED CORRECTION: 40% follow-rate eliminates over-correction bounce
-          // during high-speed bearing rotations.
-          const offX = (smoothedProj.x - pScreenX) * 0.4;
-          const offY = (smoothedProj.y - pScreenY) * 0.4;
+          const offX = (smoothedProj.x - pScreenX) * 0.8;
+          const offY = (smoothedProj.y - pScreenY) * 0.8;
 
           if (!isNaN(offX) && (Math.abs(offX) > 0.05 || Math.abs(offY) > 0.05)) {
-            map.panBy([offX, offY], { duration: 0 });
+            if (Math.abs(offX) < 150 && Math.abs(offY) < 150) {
+              map.panBy([offX, offY], { duration: 0 });
+            }
           }
         }
       }
-      
+
       // Keep the map rendering as long as we are navigating
       map.triggerRepaint();
     });
