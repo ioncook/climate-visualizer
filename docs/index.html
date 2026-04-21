@@ -237,6 +237,13 @@
       width: 120px;
     }
 
+    .setting-row select:disabled,
+    .setting-row input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      filter: grayscale(1);
+    }
+
     /* Theme-fitting range slider */
     input[type=range] {
       -webkit-appearance: none;
@@ -528,7 +535,7 @@
             <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
           </div>
           <div class="setting-row">
-            <span>3D Relief</span>
+            <span>3D Relief & Hillshade</span>
             <label class="switch">
               <input type="checkbox" id="hillshade-check">
               <span class="slider"></span>
@@ -842,31 +849,54 @@
 
       function applyTerrainState() {
         const show = document.getElementById('hillshade-check').checked;
+        const exInput = document.getElementById('terrain-exaggeration');
         const viz = show ? 'visible' : 'none';
+
         if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
 
-        const globeOpt = Array.from(projectionSelect.options).find(o => o.value === 'globe');
+        const isMobile = window.innerWidth < 600;
+        const isGlobe = projectionSelect.value === 'globe';
 
         if (show) {
-          const exVal = parseFloat(document.getElementById('terrain-exaggeration').value) || 2.0;
-          map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
-
-          if (window.innerWidth < 600) {
-            if (globeOpt) {
-              globeOpt.disabled = true;
-              globeOpt.text = 'Globe (Disabled in 3D)';
+          // MOBILE GLOBE LOCK: To prevent the violent camera jump on release, 
+          // we force exaggeration to 0 on mobile-globe, showing only hillshading.
+          if (isMobile && isGlobe) {
+            if (exInput.type !== 'text') {
+              exInput.dataset.prev = exInput.value;
+              exInput.type = 'text';
             }
-            if (projectionSelect.value !== 'mercator') {
-              projectionSelect.value = 'mercator';
-              map.setProjection({ type: 'mercator' });
+            exInput.value = '0 (Globe)';
+            exInput.disabled = true;
+            map.setTerrain(null);
+          } else {
+            if (exInput.type === 'text') {
+              exInput.type = 'number';
+              exInput.value = exInput.dataset.prev || '2.0';
+            }
+            exInput.disabled = false;
+            let exVal = parseFloat(exInput.value);
+            if (isNaN(exVal)) exVal = 0;
+
+            if (exVal > 0) {
+              map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+            } else {
+              map.setTerrain(null); // Just hillshading if exaggeration is 0
             }
           }
         } else {
-          map.setTerrain(null);
-          if (globeOpt) {
-            globeOpt.disabled = false;
-            globeOpt.text = 'Globe';
+          if (exInput.type === 'text') {
+            exInput.type = 'number';
+            exInput.value = exInput.dataset.prev || '2.0';
           }
+          exInput.disabled = false;
+          map.setTerrain(null);
+        }
+
+        // Reset Globe option text in case it was modified by a previous version
+        const globeOpt = Array.from(projectionSelect.options).find(o => o.value === 'globe');
+        if (globeOpt) {
+          globeOpt.disabled = false;
+          globeOpt.text = 'Globe';
         }
       }
 
