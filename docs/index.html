@@ -213,6 +213,10 @@
       color: var(--text-dim) !important;
     }
 
+    .maplibregl-marker {
+      opacity: 1 !important;
+    }
+
     .setting-row {
       display: flex;
       justify-content: space-between;
@@ -270,6 +274,58 @@
     .settings-menu::-webkit-scrollbar-thumb {
       background: #444;
       border-radius: 10px;
+    }
+
+    /* Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 32px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border);
+      transition: .3s;
+      border-radius: 18px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-dim);
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: #4d94ff;
+    }
+
+    input:focus+.slider {
+      box-shadow: 0 0 1px #4d94ff;
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(14px);
+      background-color: #fff;
     }
 
     /* Navigation Crosshair */
@@ -472,13 +528,30 @@
             <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
           </div>
           <div class="setting-row">
-            <span>3D Relief (Hillshade)</span>
-            <input type="checkbox" id="hillshade-check">
+            <span>3D Relief</span>
+            <label class="switch">
+              <input type="checkbox" id="hillshade-check">
+              <span class="slider"></span>
+            </label>
           </div>
           <div class="setting-row">
             <span>3D Exaggeration</span>
             <input type="number" id="terrain-exaggeration" step="0.1" min="0" max="20" value="2.0"
               style="width: 60px; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:2px 5px;">
+          </div>
+          <style>
+            @media (min-width: 600px) {
+              #mobile-pin-row {
+                display: none !important;
+              }
+            }
+          </style>
+          <div class="setting-row" id="mobile-pin-row">
+            <span>Mobile Pin Style</span>
+            <select id="mobile-pin-style">
+              <option value="classic">Classic</option>
+              <option value="contrast">High Contrast</option>
+            </select>
           </div>
         </div>
       </div>
@@ -548,9 +621,11 @@
       center: [initialLng, initialLat],
       zoom: initialZ,
       maxZoom: 11,
+      maxPitch: 75,
       pixelRatio: Math.min(window.devicePixelRatio, 2),
       projection: 'globe',
       antialias: false,
+      trackResize: false,
       collectResourceTiming: false,
       attributionControl: true,
 
@@ -648,18 +723,12 @@
         map.setProjection({ type: 'globe' });
         map.dragRotate.enable();
         map.dragPan.enable();
-        const storedHill = localStorage.getItem('climate_hillshade') === 'true';
-        if (storedHill) {
-          map.setTerrain({ 'source': 'terrain-source', 'exaggeration': 2.0 });
-          map.setPitch(45);
-        }
       } else {
         map.setProjection({ type: 'mercator' });
-        map.setPitch(0);
         map.setBearing(0);
         map.dragRotate.enable();
-        map.setTerrain(null);
       }
+      applyTerrainState();
       updateLayers();
     });
 
@@ -771,21 +840,41 @@
         }, 'top-anchor');
       }
 
-      const storedHill = localStorage.getItem('climate_hillshade') === 'true'; // Default to OFF
-      const viz = storedHill ? 'visible' : 'none';
-      if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
-      document.getElementById('hillshade-check').checked = storedHill;
+      function applyTerrainState() {
+        const show = document.getElementById('hillshade-check').checked;
+        const viz = show ? 'visible' : 'none';
+        if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
 
-      if (storedHill && proj === 'globe') {
-        map.setPitch(45);
-        const exVal = parseFloat(localStorage.getItem('climate_exaggeration')) || 2.0;
-        map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
-        document.getElementById('terrain-exaggeration').value = exVal;
-      } else {
-        map.setPitch(0);
-        map.setBearing(0);
-        map.setTerrain(null);
+        const globeOpt = Array.from(projectionSelect.options).find(o => o.value === 'globe');
+
+        if (show) {
+          const exVal = parseFloat(document.getElementById('terrain-exaggeration').value) || 2.0;
+          map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+
+          if (window.innerWidth < 600) {
+            if (globeOpt) {
+              globeOpt.disabled = true;
+              globeOpt.text = 'Globe (Disabled in 3D)';
+            }
+            if (projectionSelect.value !== 'mercator') {
+              projectionSelect.value = 'mercator';
+              map.setProjection({ type: 'mercator' });
+            }
+          }
+        } else {
+          map.setTerrain(null);
+          if (globeOpt) {
+            globeOpt.disabled = false;
+            globeOpt.text = 'Globe';
+          }
+        }
       }
+
+      window.applyTerrainState = applyTerrainState;
+
+      const storedHill = localStorage.getItem('climate_hillshade') === 'true';
+      document.getElementById('hillshade-check').checked = storedHill;
+      applyTerrainState();
       updateLayers();
 
       const params = new URLSearchParams(window.location.search);
@@ -813,19 +902,8 @@
     }
 
     document.getElementById('hillshade-check').addEventListener('change', (e) => {
-      const show = e.target.checked;
-      localStorage.setItem('climate_hillshade', show);
-      const viz = show ? 'visible' : 'none';
-      if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
-
-      if (show) {
-        map.setPitch(45);
-        const exVal = parseFloat(document.getElementById('terrain-exaggeration').value) || 2.0;
-        map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
-      } else {
-        map.setTerrain(null);
-        map.setPitch(0);
-      }
+      localStorage.setItem('climate_hillshade', e.target.checked);
+      applyTerrainState();
     });
 
     const terrainExInput = document.getElementById('terrain-exaggeration');
@@ -1023,7 +1101,18 @@
     // Initial load
     updateLayers();
 
-    map.on('moveend', syncUrl);
+    // Only sync URL on moveend for desktop. On mobile, URL updates trigger Safari's address bar 
+    // to layout thrash, throwing a window.resize event that causes catastrophic camera jumps 
+    // and marker shifting precisely when rendering 3D terrain.
+    if (window.innerWidth >= 600) {
+      let syncUrlTimeout;
+      map.on('moveend', () => {
+        // Debounce URL updates to prevent the browser from stuttering and flickering the cursor
+        // when the middle-click navigation script forcefully rapidly updates the camera.
+        clearTimeout(syncUrlTimeout);
+        syncUrlTimeout = setTimeout(syncUrl, 150);
+      });
+    }
 
     map.on('popupopen', () => { isPopupOpen = true; syncUrl(); });
     map.on('popupclose', () => {
@@ -1122,7 +1211,6 @@
           map.setProjection({ type: 'globe' });
         } else {
           map.setProjection({ type: 'mercator' });
-          map.setPitch(0);
           map.dragRotate.disable();
         }
       }
@@ -1134,6 +1222,10 @@
       if (storedExag) {
         document.getElementById('terrain-exaggeration').value = storedExag;
       }
+
+      const storedPinStyle = localStorage.getItem('climate_mobile_pin') || 'classic';
+      const pinSelect = document.getElementById('mobile-pin-style');
+      if (pinSelect) pinSelect.value = storedPinStyle;
     }
 
     const themeSelect = document.getElementById('theme');
@@ -1144,6 +1236,14 @@
       localStorage.setItem('climate_theme', val);
       if (isPopupOpen) updatePopup();
     });
+
+    const pinSelect = document.getElementById('mobile-pin-style');
+    if (pinSelect) {
+      pinSelect.addEventListener('change', () => {
+        localStorage.setItem('climate_mobile_pin', pinSelect.value);
+        if (isPopupOpen) updatePopup();
+      });
+    }
 
     // Global helper for interactive tooltip
     window.setLayer = (type, month) => {
@@ -1428,7 +1528,8 @@
         window.currentPopup = new maplibregl.Popup({
           maxWidth: '450px',
           className: 'climate-popup',
-          anchor: 'bottom'
+          anchor: 'bottom',
+          autoPan: false
         })
           .setLngLat([latlng.lng, latlng.lat])
           .setHTML(html)
@@ -1443,11 +1544,23 @@
         // Ensure no clipping by giving container enough space
         el.style.width = '24px';
         el.style.height = '34px';
-        el.innerHTML = `
-          <svg width="24" height="34" viewBox="0 -1 24 33" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="var(--pin-color)" fill-rule="evenodd" />
-          </svg>
-        `;
+
+        const pinStylePreference = document.getElementById('mobile-pin-style') ? document.getElementById('mobile-pin-style').value : (localStorage.getItem('climate_mobile_pin') || 'classic');
+
+        if (pinStylePreference === 'contrast') {
+          el.style.mixBlendMode = 'difference';
+          el.innerHTML = `
+             <svg width="24" height="34" viewBox="0 -1 24 33">
+               <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="#ffffff" fill-rule="evenodd" />
+             </svg>
+           `;
+        } else {
+          el.innerHTML = `
+             <svg width="24" height="34" viewBox="0 -1 24 33" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));">
+               <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="var(--pin-color)" fill-rule="evenodd" />
+             </svg>
+           `;
+        }
 
         window.currentMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([latlng.lng, latlng.lat])
@@ -1612,7 +1725,11 @@
       }
     }
 
+    let lastMoveTime = 0;
     map.on('click', (e) => {
+      // Basic movement guard: prevent clicks if the map is actively panning
+      if (map.isMoving() || map.isRotating() || map.isZooming()) return;
+
       // THE ONLY PLACE lockedTooltipCoords and lastLatLng are generated
       const lng = e.lngLat.lng;
       const lat = e.lngLat.lat;
@@ -1639,9 +1756,13 @@
 
     // Popup open/close tracking
 
-    // Double right-click to reset tilt/pitch
+    // Double right-click to reset tilt/pitch (Desktop Only)
     let lastRightClickTime = 0;
     map.on('contextmenu', (e) => {
+      // Mobile Safari/Chrome often register 2-finger taps/gestures as rapid contextmenus.
+      // This is what was causing the camera to snap during multi-touch.
+      if (window.innerWidth < 600 || e.originalEvent?.pointerType === 'touch') return;
+
       const now = Date.now();
       if (now - lastRightClickTime < 500) {
         e.originalEvent.preventDefault();
@@ -1659,9 +1780,12 @@
     let navAnimationId = null;
     const crosshair = document.getElementById('nav-crosshair');
 
-    map.getCanvas().addEventListener('mousedown', (e) => {
-      document.body.classList.add('grabbing');
-      if (e.button === 1) { // Middle Click
+    map.getCanvas().addEventListener('pointerdown', (e) => {
+      // Complete lockout for mobile screens to eliminate any possibility of touch interference
+      if (window.innerWidth < 600) return;
+
+      if (e.button === 1 && e.pointerType !== 'touch') {
+        document.body.classList.add('grabbing');
         e.preventDefault();
 
         if (isNavActive) {
@@ -1690,7 +1814,7 @@
       }
     });
 
-    window.addEventListener('mousemove', (e) => {
+    window.addEventListener('pointermove', (e) => {
       if (isNavActive) {
         middleCurrentPos = { x: e.clientX, y: e.clientY };
         const dist = Math.hypot(e.clientX - middleStartPos.x, e.clientY - middleStartPos.y);
@@ -1698,7 +1822,7 @@
       }
     });
 
-    window.addEventListener('mouseup', (e) => {
+    window.addEventListener('pointerup', (e) => {
       document.body.classList.remove('grabbing');
       if (e.button === 1 && isNavActive) {
         const timeElapsed = Date.now() - middleStartTime;
@@ -1773,7 +1897,6 @@
 
       navAnimationId = requestAnimationFrame(startNavLoop);
     }
-
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && window.currentPopup) {
         window.currentPopup.remove();
