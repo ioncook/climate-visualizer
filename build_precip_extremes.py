@@ -9,20 +9,17 @@ from scipy import ndimage
 # Config
 Z_MAX = 7
 OUT_DIR = 'docs'
-ERA = "1991_2020"
 MAX_WORKERS = 2
 
 _era_data = None
 _color_lut = None
+_current_loaded_era = None
 
 def _init_lut():
     global _color_lut
-    # Jan (0) -> Magenta/Purple (320), Dec (11) -> Vivid Red (0)
-    # This range (320 -> 0) means Jan and Dec are only 40 deg apart (both reddish)
     _color_lut = np.zeros((12, 4), dtype=np.uint8)
     for m in range(12):
         hue = 320 * (1 - m/11.0)
-        # Convert HSL(hue, 100%, 50%) to RGB
         c = 1.0 # chroma
         x = c * (1 - abs((hue / 60.0) % 2 - 1))
         if 0 <= hue < 60: r,g,b = c,x,0
@@ -31,17 +28,13 @@ def _init_lut():
         elif 180 <= hue < 240: r,g,b = 0,x,c
         elif 240 <= hue < 300: r,g,b = x,0,c
         else: r,g,b = c,0,x
-        
         _color_lut[m] = [int(r*255), int(g*255), int(b*255), 255]
 
 def fill_missing(data, invalid=None):
-    # Fill zeros/NaNs using nearest neighbor extrapolation from the nearest valid data points
     if invalid is None:
         invalid = (data == 0) | np.isnan(data)
     else:
-        # Augment the mask with zero-check to catch shoreline artifacts
         invalid = invalid | (data == 0)
-        
     if not np.any(invalid): return data
     ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
     return data[tuple(ind)]
@@ -61,17 +54,21 @@ def _gen_arrays(z, x, y):
     return lons, lats
 
 def process_extreme_task(args):
-    z, x, y = args
-    global _era_data
+    z, x, y, era = args
+    global _era_data, _current_loaded_era
     
-    if _era_data is None:
-        ens_path = f'All data/climate_data_0p1/{ERA}/ensemble_mean_0p1.nc'
-        k_path = f'All data/koppen_geiger_nc/{ERA}/koppen_geiger_0p00833333.nc'
+    if _era_data is None or _current_loaded_era != era:
+        ens_path = f'All data/climate_data_0p1/{era}/ensemble_mean_0p1.nc'
+        k_path = f'All data/koppen_geiger_nc/{era}/koppen_geiger_0p00833333.nc'
         
+        if not os.path.exists(ens_path) or not os.path.exists(k_path):
+            print(f"Missing data for {era}: {ens_path} or {k_path}")
+            return False
+
         ds = netCDF4.Dataset(ens_path)
         v_p = ds.variables['precipitation']
         p = v_p[:12]
-        np.nan_to_num(p, copy=False, nan=0.0) # Only monthly
+        np.nan_to_num(p, copy=False, nan=0.0)
         for m in range(p.shape[0]):
             p[m] = fill_missing(p[m], v_p[m].mask if hasattr(v_p, 'mask') else None)
         ds.close()
@@ -88,9 +85,10 @@ def process_extreme_task(args):
             'shape': (p.shape[1], p.shape[2]),
             'm_shape': m_k.shape
         }
+        _current_loaded_era = era
         gc.collect()
 
-    era_dir = os.path.join(OUT_DIR, ERA)
+    era_dir = os.path.join(OUT_DIR, era)
     max_path = os.path.join(era_dir, f'tiles_precip_max/{z}/{x}/{y}.png')
     min_path = os.path.join(era_dir, f'tiles_precip_min/{z}/{x}/{y}.png')
 
@@ -137,15 +135,17 @@ def process_extreme_task(args):
     return True
 
 if __name__ == "__main__":
-    print(f"Building Precip Extremes for {ERA}")
-    all_tasks = [(z, x, y) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)]
+    ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
+    for era in ERAS:
+        print(f"Building Precip Extremes for {era}")
+        all_tasks = [(z, x, y, era) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)]
+        
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=_init_worker) as executor:
+            futures = {executor.submit(process_extreme_task, t): t for t in all_tasks}
+            count = 0
+            for f in as_completed(futures):
+                count += 1
+                if count % 1000 == 0:
+                    print(f"[{era}] Done: {count}/{len(all_tasks)}")
     
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=_init_worker) as executor:
-        futures = {executor.submit(process_extreme_task, t): t for t in all_tasks}
-        count = 0
-        for f in as_completed(futures):
-            count += 1
-            if count % 1000 == 0:
-                print(f"Done: {count}/{len(all_tasks)}")
-    
-    print("EXTREMES DONE")
+    print("ALL ERAS EXTREMES DONE")
