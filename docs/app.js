@@ -200,8 +200,8 @@ map.on('load', () => {
     source: 'data-source',
     paint: {
       'raster-opacity': 0.75,
-      'raster-resampling': 'nearest',
-      'raster-fade-duration': 20
+      'raster-resampling': 'linear',
+      'raster-fade-duration': 0
     }
   });
 
@@ -220,7 +220,7 @@ map.on('load', () => {
     map.addSource('terrain-source', {
       'type': 'raster-dem',
       'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-      'tileSize': 256,
+      'tileSize': 512,
       'encoding': 'terrarium',
       'maxzoom': 14
     });
@@ -230,7 +230,7 @@ map.on('load', () => {
     map.addSource('hillshade-source', {
       'type': 'raster-dem',
       'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-      'tileSize': 256,
+      'tileSize': 512,
       'encoding': 'terrarium',
       'maxzoom': 14
     });
@@ -819,9 +819,17 @@ function updatePopup() {
   html += `</div>`;
   if (window.currentPopup && window.currentPopup.isOpen()) window.currentPopup.setHTML(html);
   else {
+    if (window.currentPopup) window.currentPopup.remove();
     window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup', anchor: 'bottom', autoPan: false })
       .setLngLat([latlng.lng, latlng.lat]).setHTML(html).addTo(map);
   }
+
+  window.currentPopup.off('close');
+  window.currentPopup.on('close', () => {
+    document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
+    if (window.currentMarker) window.currentMarker = null;
+  });
+
   if (window.currentMarker) window.currentMarker.remove();
   if (window.innerWidth < 600) {
     const el = document.createElement('div'); el.style.width = '24px'; el.style.height = '34px';
@@ -922,6 +930,8 @@ async function queryLocation(lat, lng, isRefresh = false) {
     if (!kid1 || !d1_raw) {
       document.getElementById('status').innerText = "Ocean (No Data)";
       if (window.currentPopup) window.currentPopup.remove();
+      document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
+      if (window.currentMarker) { window.currentMarker.remove(); window.currentMarker = null; }
       return;
     }
 
