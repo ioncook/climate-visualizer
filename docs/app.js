@@ -200,7 +200,7 @@ map.on('load', () => {
     source: 'data-source',
     paint: {
       'raster-opacity': 0.75,
-      'raster-resampling': 'linear',
+      'raster-resampling': 'nearest',
       'raster-fade-duration': 0
     }
   });
