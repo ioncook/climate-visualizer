@@ -246,7 +246,7 @@ map.on('load', () => {
         'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
         'hillshade-highlight-color': 'rgba(255,255,255,0.1)'
       }
-    }, 'top-anchor');
+    }); // Add at top
   }
 
   function applyTerrainState() {
