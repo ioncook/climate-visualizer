@@ -986,15 +986,20 @@ map.on('contextmenu', (e) => {
   lastRightClickTime = now;
 });
 
-let isNavActive = false, middleStartPos = { x: 0, y: 0 }, middleCurrentPos = { x: 0, y: 0 }, middleStartLlngLat = null, isDragging = false, smoothedProj = null, navSmoothX = 0, navSmoothY = 0, middleStartTime = 0;
+let isNavActive = false, wasNavActiveOnDown = false, middleStartPos = { x: 0, y: 0 }, middleCurrentPos = { x: 0, y: 0 }, middleStartLlngLat = null, isDragging = false, smoothedProj = null, navSmoothX = 0, navSmoothY = 0, middleStartTime = 0;
 const crosshair = document.getElementById('nav-crosshair');
+
+map.getCanvas().addEventListener('mousedown', (e) => {
+  if (e.button === 1) e.preventDefault();
+});
 
 map.getCanvas().addEventListener('pointerdown', (e) => {
   if (window.innerWidth < 600) return;
   document.body.classList.add('grabbing');
   if (e.button === 1 && e.pointerType !== 'touch') {
     e.preventDefault();
-    if (isNavActive) { middleStartTime = Date.now(); middleStartPos = { x: e.clientX, y: e.clientY }; isDragging = false; return; }
+    wasNavActiveOnDown = isNavActive;
+    if (isNavActive) return;
     middleStartTime = Date.now(); middleStartPos = { x: e.clientX, y: e.clientY }; middleCurrentPos = { x: e.clientX, y: e.clientY };
     navSmoothX = 0; navSmoothY = 0; isDragging = false; isNavActive = true;
     const rect = map.getCanvas().getBoundingClientRect();
@@ -1028,9 +1033,9 @@ window.addEventListener('pointerup', (e) => {
   document.body.classList.remove('grabbing');
   ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d));
   if (e.button === 1 && isNavActive) {
-    if (isDragging || Date.now() - middleStartTime > 300) { isNavActive = false; crosshair.style.display = 'none'; }
+    if (isDragging || Date.now() - middleStartTime > 300 || wasNavActiveOnDown) { isNavActive = false; crosshair.style.display = 'none'; }
   } else if (e.button === 0 && isNavActive) { isNavActive = false; crosshair.style.display = 'none'; }
-  if (!isNavActive) { ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d)); currentNavDir = ''; }
+  if (!isNavActive) { ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => document.body.classList.remove('nav-' + d)); currentNavDir = ''; navSmoothX = 0; navSmoothY = 0; }
 });
 
 let currentNavDir = '';

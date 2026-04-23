@@ -58,6 +58,11 @@ ___
 ### Reset button
  > Left of the setting icon, click this to reset the map view and layer settings
 
+### Trewartha info
+ > Shown beneath the koppen header in the popup.
+ - The 4 digit code shows the trewartha zone and the universal thermal scale summer/winter class
+ - The text next to the code is the description of the universal thermal scale letters
+
 ### Middle Click Navigation
  - Hold middle click and drag up and down to zoom in and out
  - Hold middle click and drag left and right to rotate the view
