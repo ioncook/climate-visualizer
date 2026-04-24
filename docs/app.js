@@ -48,6 +48,7 @@ const basemapSelect = document.getElementById('basemap');
 const unitsSelect = document.getElementById('units');
 const opacitySlider = document.getElementById('layer-opacity');
 const projectionSelect = document.getElementById('projection');
+const bordersCheck = document.getElementById('borders-check');
 
 if (urlParams.get('era')) eraSelect.value = urlParams.get('era');
 if (urlParams.get('comp')) compareSelect.value = urlParams.get('comp');
@@ -164,10 +165,117 @@ projectionSelect.addEventListener('change', () => {
   updateLayers();
 });
 
+function applyTerrainState() {
+  const show = document.getElementById('hillshade-check').checked;
+  const exInput = document.getElementById('terrain-exaggeration');
+  const viz = show ? 'visible' : 'none';
+
+  if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
+
+  const isMobile = window.innerWidth < 600;
+  const isGlobe = projectionSelect.value === 'globe';
+
+  if (show) {
+    if (isMobile && isGlobe) {
+      if (exInput.type !== 'text') {
+        exInput.dataset.prev = exInput.value;
+        exInput.type = 'text';
+      }
+      exInput.value = '0 (Globe)';
+      exInput.disabled = true;
+      map.setTerrain(null);
+    } else {
+      if (exInput.type === 'text') {
+        exInput.type = 'number';
+        exInput.value = exInput.dataset.prev || '2.0';
+      }
+      exInput.disabled = false;
+      let exVal = parseFloat(exInput.value);
+      if (isNaN(exVal)) exVal = 0;
+      if (exVal > 0) map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+      else map.setTerrain(null);
+    }
+  } else {
+    if (exInput.type === 'text') {
+      exInput.type = 'number';
+      exInput.value = exInput.dataset.prev || '2.0';
+    }
+    exInput.disabled = false;
+    map.setTerrain(null);
+  }
+  const globeOpt = Array.from(projectionSelect.options).find(o => o.value === 'globe');
+  if (globeOpt) {
+    globeOpt.disabled = false;
+    globeOpt.text = 'Globe';
+  }
+}
+
+function updateBorders() {
+  const show = bordersCheck.checked;
+  localStorage.setItem('climate_borders', show);
+
+  if (!map.getSource('borders-source')) {
+    map.addSource('borders-source', {
+      type: 'geojson',
+      data: 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_boundary_lines_land.geojson'
+    });
+  }
+
+  if (show) {
+    if (!map.getLayer('borders-layer')) {
+      map.addLayer({
+        id: 'borders-layer',
+        type: 'line',
+        source: 'borders-source',
+        paint: { 'line-color': '#000000', 'line-width': 1.5, 'line-opacity': 1.0 }
+      });
+    }
+    map.setLayoutProperty('borders-layer', 'visibility', 'visible');
+    map.moveLayer('borders-layer');
+  } else {
+    if (map.getLayer('borders-layer')) map.setLayoutProperty('borders-layer', 'visibility', 'none');
+  }
+}
+
+bordersCheck.addEventListener('change', updateBorders);
+
 map.on('load', () => {
   if (!map.getLayer('bottom-anchor')) map.addLayer({ id: 'bottom-anchor', type: 'background', paint: { 'background-opacity': 0 } });
   if (!map.getLayer('middle-anchor')) map.addLayer({ id: 'middle-anchor', type: 'background', paint: { 'background-opacity': 0 } });
   if (!map.getLayer('top-anchor')) map.addLayer({ id: 'top-anchor', type: 'background', paint: { 'background-opacity': 0 } });
+
+  if (!map.getSource('terrain-source')) {
+    map.addSource('terrain-source', {
+      'type': 'raster-dem',
+      'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      'tileSize': 512,
+      'encoding': 'terrarium',
+      'maxzoom': 14
+    });
+  }
+
+  if (!map.getSource('hillshade-source')) {
+    map.addSource('hillshade-source', {
+      'type': 'raster-dem',
+      'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      'tileSize': 512,
+      'encoding': 'terrarium',
+      'maxzoom': 14
+    });
+  }
+
+  if (!map.getLayer('hillshade-layer')) {
+    map.addLayer({
+      id: 'hillshade-layer',
+      type: 'hillshade',
+      source: 'hillshade-source',
+      paint: {
+        'hillshade-exaggeration': 0.4,
+        'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
+        'hillshade-highlight-color': 'rgba(255,255,255,0.1)'
+      }
+    });
+  }
 
 
   loadStoredSettings();
@@ -216,83 +324,7 @@ map.on('load', () => {
     map.dragRotate.enable();
   }
 
-  if (!map.getSource('terrain-source')) {
-    map.addSource('terrain-source', {
-      'type': 'raster-dem',
-      'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-      'tileSize': 512,
-      'encoding': 'terrarium',
-      'maxzoom': 14
-    });
-  }
 
-  if (!map.getSource('hillshade-source')) {
-    map.addSource('hillshade-source', {
-      'type': 'raster-dem',
-      'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-      'tileSize': 512,
-      'encoding': 'terrarium',
-      'maxzoom': 14
-    });
-  }
-
-  if (!map.getLayer('hillshade-layer')) {
-    map.addLayer({
-      id: 'hillshade-layer',
-      type: 'hillshade',
-      source: 'hillshade-source',
-      paint: {
-        'hillshade-exaggeration': 0.4,
-        'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
-        'hillshade-highlight-color': 'rgba(255,255,255,0.1)'
-      }
-    }); // Add at top
-  }
-
-  function applyTerrainState() {
-    const show = document.getElementById('hillshade-check').checked;
-    const exInput = document.getElementById('terrain-exaggeration');
-    const viz = show ? 'visible' : 'none';
-
-    if (map.getLayer('hillshade-layer')) map.setLayoutProperty('hillshade-layer', 'visibility', viz);
-
-    const isMobile = window.innerWidth < 600;
-    const isGlobe = projectionSelect.value === 'globe';
-
-    if (show) {
-      if (isMobile && isGlobe) {
-        if (exInput.type !== 'text') {
-          exInput.dataset.prev = exInput.value;
-          exInput.type = 'text';
-        }
-        exInput.value = '0 (Globe)';
-        exInput.disabled = true;
-        map.setTerrain(null);
-      } else {
-        if (exInput.type === 'text') {
-          exInput.type = 'number';
-          exInput.value = exInput.dataset.prev || '2.0';
-        }
-        exInput.disabled = false;
-        let exVal = parseFloat(exInput.value);
-        if (isNaN(exVal)) exVal = 0;
-        if (exVal > 0) map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
-        else map.setTerrain(null);
-      }
-    } else {
-      if (exInput.type === 'text') {
-        exInput.type = 'number';
-        exInput.value = exInput.dataset.prev || '2.0';
-      }
-      exInput.disabled = false;
-      map.setTerrain(null);
-    }
-    const globeOpt = Array.from(projectionSelect.options).find(o => o.value === 'globe');
-    if (globeOpt) {
-      globeOpt.disabled = false;
-      globeOpt.text = 'Globe';
-    }
-  }
 
   window.applyTerrainState = applyTerrainState;
   const storedHill = localStorage.getItem('climate_hillshade') === 'true';
@@ -414,6 +446,8 @@ function updateLayers() {
         source.setTiles([baseUrl + tilePath]);
         map.setLayoutProperty('data-layer', 'visibility', 'visible');
         map.setPaintProperty('data-layer', 'raster-opacity', op);
+        if (map.getLayer('hillshade-layer')) map.moveLayer('hillshade-layer'); // ENFORCE OVER DATA
+        if (map.getLayer('borders-layer')) map.moveLayer('borders-layer'); // ENFORCE TOP
       }
     });
   } else if (source) {
@@ -444,14 +478,20 @@ function updateLegend(type, isCompare) {
     const t2 = isMetric ? "+1.7°C" : "+3°F";
     const tMin = isMetric ? "-30°C" : "-22°F";
     const tMax = isMetric ? "30°C" : "86°F";
-    const tempGradient = `linear-gradient(to right, 
-      hsl(270, 100%, 65%), 
-      hsl(225, 100%, 65%), 
-      hsl(180, 100%, 65%), 
-      hsl(135, 100%, 65%), 
-      hsl(90, 100%, 65%), 
-      hsl(45, 100%, 65%), 
-      hsl(0, 100%, 65%))`;
+    const tempGradient = isCompare ?
+      `linear-gradient(to right, hsl(240, 100%, 65%), hsl(120, 100%, 65%), hsl(0, 100%, 65%))` :
+      `linear-gradient(to right, 
+      hsl(314, 22.1%, 73.3%) 0%,
+      hsl(311, 39.7%, 45.5%) 10%,
+      hsl(281, 31.7%, 50.6%) 20%,
+      hsl(178, 46.3%, 73.7%) 30%,
+      hsl(173, 39.9%, 58.2%) 40%,
+      hsl(196, 40.3%, 56.7%) 45%,
+      hsl(217, 47.9%, 57.1%) 50%,
+      hsl(153, 29.5%, 37.8%) 52%,
+      hsl(69, 71.9%, 33.5%) 66%,
+      hsl(45, 96.8%, 48.4%) 85%,
+      hsl(17, 81.8%, 50.4%) 100%)`;
     const tMid = isCompare ? "0" : (isMetric ? "0°" : "32°F");
     contentEl.innerHTML = `
       <div class="gradient-bar" style="background: ${tempGradient};"></div>
@@ -565,7 +605,15 @@ function loadStoredSettings() {
     else { map.setProjection({ type: 'mercator' }); map.dragRotate.disable(); }
   }
 
-  document.getElementById('hillshade-check').checked = localStorage.getItem('climate_hillshade') === 'true';
+  const hillshadeCheck = document.getElementById('hillshade-check');
+  hillshadeCheck.checked = localStorage.getItem('climate_hillshade') === 'true';
+
+  const bordersCheck = document.getElementById('borders-check');
+  bordersCheck.checked = localStorage.getItem('climate_borders') === 'true';
+
+  applyTerrainState();
+  updateBorders();
+
   const storedExag = localStorage.getItem('climate_exaggeration');
   if (storedExag) document.getElementById('terrain-exaggeration').value = storedExag;
   const storedPinStyle = localStorage.getItem('climate_mobile_pin') || 'classic';
@@ -589,6 +637,7 @@ if (pinSelect) {
     if (isPopupOpen) updatePopup();
   });
 }
+
 
 window.setLayer = (type, month) => {
   if (type) currentLayerType = type;
@@ -618,9 +667,33 @@ makeSelectScrollable(projectionSelect);
 document.getElementById('status').innerText = "Click map to load high-res climate data";
 
 function getTempColor(t) {
-  let clamped = Math.max(-30, Math.min(30, t));
-  let hue = 240 * (1 - (clamped + 30) / 60);
-  return `hsl(${hue}, 100%, 65%)`;
+  const points = [
+    { t: -70.15, h: 313.3, s: 24.3, l: 36.3 },
+    { t: -55.15, h: 314.0, s: 22.1, l: 73.3 },
+    { t: -40.15, h: 311.1, s: 39.7, l: 45.5 },
+    { t: -25.15, h: 280.5, s: 31.7, l: 50.6 },
+    { t: -15.15, h: 178.1, s: 46.3, l: 73.7 },
+    { t: -8.15, h: 172.9, s: 39.9, l: 58.2 },
+    { t: -4.15, h: 195.5, s: 40.3, l: 56.7 },
+    { t: 0.0, h: 217.1, s: 47.9, l: 57.1 },
+    { t: 0.85, h: 152.6, s: 29.5, l: 37.8 },
+    { t: 9.85, h: 69.3, s: 71.9, l: 33.5 },
+    { t: 20.85, h: 44.9, s: 96.8, l: 48.4 },
+    { t: 29.85, h: 16.8, s: 81.8, l: 50.4 },
+    { t: 46.85, h: 11.8, s: 100.0, l: 13.9 }
+  ];
+  let clamped = Math.max(-70.15, Math.min(46.85, t));
+  let h = points[0].h, s = points[0].s, l = points[0].l;
+  for (let i = 0; i < points.length - 1; i++) {
+    if (clamped >= points[i].t && clamped <= points[i + 1].t) {
+      let ratio = (clamped - points[i].t) / (points[i + 1].t - points[i].t);
+      h = points[i].h + ratio * (points[i + 1].h - points[i].h);
+      s = points[i].s + ratio * (points[i + 1].s - points[i].s);
+      l = points[i].l + ratio * (points[i + 1].l - points[i].l);
+      break;
+    }
+  }
+  return `hsl(${h}, ${s}%, ${l}%)`;
 }
 
 function getPrecipColor(p) {
@@ -658,7 +731,7 @@ function getTrewartha(t, p, lat) {
     if (temp > -10) return { l: 'o', w: 'Cold' };
     if (temp >= -24.9) return { l: 'c', w: 'Very Cold' };
     if (temp >= -39.9) return { l: 'd', w: 'Severely Cold' };
-    return { l: 'e', w: 'Excessively Cold' };
+    return { l: 'e', w: 'Extremely Cold' };
   }
   const warmInfo = getThermalInfo(maxT);
   const coldInfo = getThermalInfo(minT);
