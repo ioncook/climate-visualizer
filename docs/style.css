@@ -60,13 +60,31 @@ body {
 
 select,
 button {
+  cursor: pointer;
+}
+
+#location-search {
+  cursor: text;
+}
+
+.controls select,
+.controls button,
+#location-search {
   background-color: var(--btn-bg);
   color: var(--text);
   border: 1px solid var(--border);
-  padding: 5px 15px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border-radius: 4px;
-  cursor: pointer;
   font-family: inherit;
+  font-size: 13px;
+  margin: 0;
+  display: block;
+}
+
+.controls button {
+  cursor: pointer;
 }
 
 .settings-dropdown {
@@ -94,6 +112,19 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.search-result-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.search-result-item:last-child {
+  border-bottom: none;
+}
+.search-result-item:hover {
+  background-color: var(--btn-bg);
 }
 
 .legend-container {
@@ -428,7 +459,7 @@ body.nav-nw .maplibregl-canvas {
     text-transform: uppercase;
   }
 
-  .source-info {
+  .source-info, #search-container {
     display: none !important;
   }
 

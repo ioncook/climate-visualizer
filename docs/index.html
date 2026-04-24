@@ -27,6 +27,10 @@
       </div>
     </div>
     <div class="controls">
+      <div id="search-container" style="position: relative;">
+        <input type="text" id="location-search" placeholder="Search places..." autocomplete="off" style="width: 200px; box-sizing: border-box;">
+        <div id="search-results" class="settings-content" style="top: 32px; left: 0; right: auto; min-width: 200px; padding: 0; display: none; overflow: hidden;"></div>
+      </div>
       <select id="era">
         <option value="1901_1930">1901-1930 Averages</option>
         <option value="1931_1960">1931-1960 Averages</option>
@@ -41,6 +45,7 @@
         <option value="1991_2020">1991-2020 Averages</option>
       </select>
       <div class="settings-dropdown" style="display:flex; align-items:center;">
+
         <button onclick="window.location.href=window.location.pathname" title="Reset View"
           style="background:none; border:none; padding: 0 5px; cursor:pointer; display:flex; align-items:center;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
@@ -111,11 +116,12 @@
               style="width: 60px; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:2px 5px;">
           </div>
           <div class="setting-row">
-            <span>Show Borders</span>
-            <label class="switch">
-              <input type="checkbox" id="borders-check">
-              <span class="slider"></span>
-            </label>
+            <span>Borders</span>
+            <select id="borders-select">
+              <option value="off">Off</option>
+              <option value="national">National</option>
+              <option value="state">National + State</option>
+            </select>
           </div>
           <div class="setting-row" id="mobile-pin-row">
             <span>Mobile Pin Style</span>

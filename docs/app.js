@@ -48,7 +48,6 @@ const basemapSelect = document.getElementById('basemap');
 const unitsSelect = document.getElementById('units');
 const opacitySlider = document.getElementById('layer-opacity');
 const projectionSelect = document.getElementById('projection');
-const bordersCheck = document.getElementById('borders-check');
 
 if (urlParams.get('era')) eraSelect.value = urlParams.get('era');
 if (urlParams.get('comp')) compareSelect.value = urlParams.get('comp');
@@ -211,17 +210,24 @@ function applyTerrainState() {
 }
 
 function updateBorders() {
-  const show = bordersCheck.checked;
-  localStorage.setItem('climate_borders', show);
+  const mode = document.getElementById('borders-select').value;
+  localStorage.setItem('climate_borders_mode', mode);
 
   if (!map.getSource('borders-source')) {
     map.addSource('borders-source', {
       type: 'geojson',
-      data: 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_boundary_lines_land.geojson'
+      data: './borders.json'
+    });
+  }
+  if (!map.getSource('state-borders-source')) {
+    map.addSource('state-borders-source', {
+      type: 'geojson',
+      data: './borders_state.json'
     });
   }
 
-  if (show) {
+  // Handle National Borders
+  if (mode === 'national' || mode === 'state') {
     if (!map.getLayer('borders-layer')) {
       map.addLayer({
         id: 'borders-layer',
@@ -235,9 +241,30 @@ function updateBorders() {
   } else {
     if (map.getLayer('borders-layer')) map.setLayoutProperty('borders-layer', 'visibility', 'none');
   }
+
+  // Handle State Borders
+  if (mode === 'state') {
+    if (!map.getLayer('state-borders-layer')) {
+      map.addLayer({
+        id: 'state-borders-layer',
+        type: 'line',
+        source: 'state-borders-source',
+        paint: { 'line-color': '#000000', 'line-width': 0.75, 'line-opacity': 0.5 }
+      });
+    }
+    map.setLayoutProperty('state-borders-layer', 'visibility', 'visible');
+    // State borders should go below national borders if possible
+    if (map.getLayer('borders-layer')) {
+      map.moveLayer('state-borders-layer', 'borders-layer');
+    } else {
+      map.moveLayer('state-borders-layer');
+    }
+  } else {
+    if (map.getLayer('state-borders-layer')) map.setLayoutProperty('state-borders-layer', 'visibility', 'none');
+  }
 }
 
-bordersCheck.addEventListener('change', updateBorders);
+document.getElementById('borders-select').addEventListener('change', updateBorders);
 
 map.on('load', () => {
   if (!map.getLayer('bottom-anchor')) map.addLayer({ id: 'bottom-anchor', type: 'background', paint: { 'background-opacity': 0 } });
@@ -308,6 +335,7 @@ map.on('load', () => {
     source: 'data-source',
     paint: {
       'raster-opacity': 0.75,
+      'raster-opacity-transition': { duration: 0 },
       'raster-resampling': 'nearest',
       'raster-fade-duration': 0
     }
@@ -339,6 +367,7 @@ map.on('load', () => {
     isPopupOpen = true;
     requestAnimationFrame(() => queryLocation(plat, plng));
   }
+  updateBorders();
 });
 
 
@@ -447,7 +476,9 @@ function updateLayers() {
         map.setLayoutProperty('data-layer', 'visibility', 'visible');
         map.setPaintProperty('data-layer', 'raster-opacity', op);
         if (map.getLayer('hillshade-layer')) map.moveLayer('hillshade-layer'); // ENFORCE OVER DATA
+        if (map.getLayer('state-borders-layer')) map.moveLayer('state-borders-layer');
         if (map.getLayer('borders-layer')) map.moveLayer('borders-layer'); // ENFORCE TOP
+        map.triggerRepaint();
       }
     });
   } else if (source) {
@@ -551,11 +582,12 @@ unitsSelect.addEventListener('change', () => {
   if (window.currentPopup && window.currentPopup.isOpen()) updatePopup();
   updateLegend(currentLayerType, isCompareMode());
 });
-
-opacitySlider.addEventListener('input', () => {
-  const op = opacitySlider.value / 100;
-  localStorage.setItem('climate_opacity', opacitySlider.value);
-  if (map.getLayer('data-layer')) map.setPaintProperty('data-layer', 'raster-opacity', op);
+opacitySlider.addEventListener('input', (e) => {
+  const op = e.target.value / 100;
+  localStorage.setItem('climate_opacity', e.target.value);
+  if (map.getLayer('data-layer')) {
+    map.setPaintProperty('data-layer', 'raster-opacity', op);
+  }
 });
 
 document.getElementById('opacity-row').addEventListener('wheel', (e) => {
@@ -567,6 +599,87 @@ document.getElementById('opacity-row').addEventListener('wheel', (e) => {
 
 eraSelect.addEventListener('change', () => { updateLayers(); maybeRefresh(); });
 compareSelect.addEventListener('change', () => { updateLayers(); maybeRefresh(); });
+
+// Location Search Logic
+const searchInput = document.getElementById('location-search');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+
+searchInput.addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  const q = e.target.value.trim();
+  if (q.length < 3) {
+    searchResults.style.display = 'none';
+    return;
+  }
+  searchTimeout = setTimeout(() => {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.length === 0) {
+          searchResults.innerHTML = '<div style="padding: 8px 10px; font-size: 12px;">No results found</div>';
+        } else {
+          searchResults.innerHTML = data.map(item => `
+            <div class="search-result-item" data-lat="${item.lat}" data-lon="${item.lon}">
+              ${item.display_name}
+            </div>
+          `).join('');
+        }
+        searchResults.style.display = 'block';
+      })
+      .catch(err => console.error('Search error:', err));
+  }, 400);
+});
+
+function triggerLocationQuery(lat, lng) {
+  const clampedLat = Math.max(-90, Math.min(90, lat));
+  const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
+  const latAbs = Math.abs(clampedLat).toFixed(2), lngAbs = Math.abs(wrappedLng).toFixed(2);
+  const latDir = clampedLat >= 0 ? 'N' : 'S', lngDir = wrappedLng >= 0 ? 'E' : 'W';
+  lockedTooltipCoords = `<div style="text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); window.open('https://www.google.com/maps?q=${clampedLat},${wrappedLng}', '_blank');"><div>${latAbs}° ${latDir}</div><div>${lngAbs}° ${lngDir}</div></div>`;
+  lastLatLng = { lat: clampedLat, lng: wrappedLng }; 
+  isPopupOpen = true; 
+  syncUrl(); 
+  queryLocation(lat, lng);
+}
+
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const firstResult = searchResults.querySelector('.search-result-item');
+    if (firstResult) {
+      firstResult.click();
+    }
+  }
+});
+
+searchResults.addEventListener('click', (e) => {
+  const item = e.target.closest('.search-result-item');
+  if (item) {
+    const lat = parseFloat(item.dataset.lat);
+    const lon = parseFloat(item.dataset.lon);
+    
+    // Setup popup state and query IMMEDIATELY, exactly like a real click
+    triggerLocationQuery(lat, lon);
+    
+    // Jump instantly to location without animation
+    map.jumpTo({ center: [lon, lat], zoom: 8 });
+
+    
+    // Clean up
+    searchResults.style.display = 'none';
+    searchInput.value = '';
+    searchInput.blur();
+  }
+});
+
+
+// Close search results if clicked outside
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+    searchResults.style.display = 'none';
+  }
+});
 
 window.toggleSettings = (e) => {
   e.stopPropagation();
@@ -608,11 +721,11 @@ function loadStoredSettings() {
   const hillshadeCheck = document.getElementById('hillshade-check');
   hillshadeCheck.checked = localStorage.getItem('climate_hillshade') === 'true';
 
-  const bordersCheck = document.getElementById('borders-check');
-  bordersCheck.checked = localStorage.getItem('climate_borders') === 'true';
+  const bordersMode = localStorage.getItem('climate_borders_mode');
+  if (bordersMode) document.getElementById('borders-select').value = bordersMode;
+
 
   applyTerrainState();
-  updateBorders();
 
   const storedExag = localStorage.getItem('climate_exaggeration');
   if (storedExag) document.getElementById('terrain-exaggeration').value = storedExag;
@@ -890,7 +1003,10 @@ function updatePopup() {
     `;
   }
   html += `</div>`;
-  if (window.currentPopup && window.currentPopup.isOpen()) window.currentPopup.setHTML(html);
+  if (window.currentPopup && window.currentPopup.isOpen()) {
+    window.currentPopup.setLngLat([latlng.lng, latlng.lat]).setHTML(html);
+  }
+
   else {
     if (window.currentPopup) window.currentPopup.remove();
     window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup', anchor: 'bottom', autoPan: false })
@@ -1042,13 +1158,7 @@ async function queryLocation(lat, lng, isRefresh = false) {
 
 map.on('click', (e) => {
   if (map.isMoving() || map.isRotating() || map.isZooming()) return;
-  const lng = e.lngLat.lng, lat = e.lngLat.lat;
-  const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
-  const clampedLat = Math.max(-90, Math.min(90, lat));
-  const latAbs = Math.abs(clampedLat).toFixed(2), lngAbs = Math.abs(wrappedLng).toFixed(2);
-  const latDir = clampedLat >= 0 ? 'N' : 'S', lngDir = wrappedLng >= 0 ? 'E' : 'W';
-  lockedTooltipCoords = `<div style="text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); window.open('https://www.google.com/maps?q=${clampedLat},${wrappedLng}', '_blank');"><div>${latAbs}° ${latDir}</div><div>${lngAbs}° ${lngDir}</div></div>`;
-  lastLatLng = { lat: clampedLat, lng: wrappedLng }; isPopupOpen = true; syncUrl(); queryLocation(lat, lng);
+  triggerLocationQuery(e.lngLat.lat, e.lngLat.lng);
 });
 
 let lastRightClickTime = 0;
