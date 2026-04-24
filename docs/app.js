@@ -637,9 +637,9 @@ function triggerLocationQuery(lat, lng) {
   const latAbs = Math.abs(clampedLat).toFixed(2), lngAbs = Math.abs(wrappedLng).toFixed(2);
   const latDir = clampedLat >= 0 ? 'N' : 'S', lngDir = wrappedLng >= 0 ? 'E' : 'W';
   lockedTooltipCoords = `<div style="text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); window.open('https://www.google.com/maps?q=${clampedLat},${wrappedLng}', '_blank');"><div>${latAbs}° ${latDir}</div><div>${lngAbs}° ${lngDir}</div></div>`;
-  lastLatLng = { lat: clampedLat, lng: wrappedLng }; 
-  isPopupOpen = true; 
-  syncUrl(); 
+  lastLatLng = { lat: clampedLat, lng: wrappedLng };
+  isPopupOpen = true;
+  syncUrl();
   queryLocation(lat, lng);
 }
 
@@ -658,14 +658,14 @@ searchResults.addEventListener('click', (e) => {
   if (item) {
     const lat = parseFloat(item.dataset.lat);
     const lon = parseFloat(item.dataset.lon);
-    
+
     // Setup popup state and query IMMEDIATELY, exactly like a real click
     triggerLocationQuery(lat, lon);
-    
+
     // Jump instantly to location without animation
     map.jumpTo({ center: [lon, lat], zoom: 8 });
 
-    
+
     // Clean up
     searchResults.style.display = 'none';
     searchInput.value = '';
@@ -907,13 +907,13 @@ function updatePopup() {
 
   if (isCompare) {
     html += `
-      <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:6px; margin-bottom:8px; display: flex; align-items: center; min-height: 32px;">
-        <div style="display: flex; align-items: center; cursor: pointer; gap: 4px; margin-top: -3px;" onclick="event.stopPropagation(); setLayer('koppen')">
+      <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:5px; display: flex; align-items: center; min-height: 36px;">
+        <div style="display: flex; align-items: center; cursor: pointer; gap: 4px; margin-top: -6px;" onclick="event.stopPropagation(); setLayer('koppen')">
           <span style="background:${COLORS[d1.i]}; color:#000; padding:3px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info1[0]}</span>
           <span style="margin: 0 4px; color: var(--text-dim); font-size: 16px;">&rarr;</span>
           <span style="background:${COLORS[d2.i]}; color:#000; padding:3px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info2[0]}</span>
         </div>
-        <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2;">
+        <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2; align-self: center; margin-top: 2px;">
           ${coordHtml}
           <div style="color:var(--text-dim);">Elev: ${lastQueryData.elevation || 'N/A'}${(lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
         </div>
