@@ -547,7 +547,7 @@ function updateLegend(type, isCompare) {
   } else if (type === 'precip_max' || type === 'precip_min') {
     titleEl.innerText = type === 'precip_max' ? "Wettest Month" : "Driest Month";
     contentEl.innerHTML = `
-      <div class="gradient-bar" style="background: linear-gradient(to right, #ff00ff, #0000ff, #00ff00, #ffff00, #ff0000);"></div>
+      <div class="gradient-bar" style="background: linear-gradient(to right, rgb(146, 7, 65), rgb(153, 0, 150), rgb(92, 0, 153), rgb(0, 69, 153), rgb(5, 115, 148), rgb(2, 151, 111), rgb(2, 151, 64), rgb(10, 153, 0), rgb(153, 143, 0), rgb(153, 99, 0), rgb(151, 59, 2), rgb(153, 0, 0));"></div>
       <div class="legend-labels"><span>Jan</span><span>Jul</span><span>Dec</span></div>
     `;
   }

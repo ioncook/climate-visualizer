@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Precipitation Extremes Color Designer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --card: #16161a;
+            --accent: #3b82f6;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        header { margin-bottom: 40px; text-align: center; }
+        h1 { font-size: 2rem; font-weight: 600; margin-bottom: 8px; background: linear-gradient(135deg, #fff 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: var(--text-dim); font-size: 1.1rem; }
+
+        .designer-core {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            background: var(--card);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            border: 1px solid var(--border);
+        }
+
+        .month-tile {
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono';
+            transition: all 0.1s;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .month-tile.active {
+            z-index: 10;
+            box-shadow: inset 0 0 0 4px #fff, 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .center-editor {
+            grid-column: 2 / span 2;
+            grid-row: 2 / span 2;
+            background: var(--card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .wheel-box { 
+            position: relative; 
+            width: 140px; 
+            height: 140px; 
+            cursor: crosshair; 
+            touch-action: none; 
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .wheel-bg { width: 100%; height: 100%; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
+        .wheel-white { position: absolute; inset: 0; background: radial-gradient(circle, white 0%, transparent 100%); pointer-events: none; }
+        .wheel-marker { position: absolute; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 8px rgba(0,0,0,0.5); }
+
+        .slider-container {
+            width: 320px;
+            margin-top: 24px;
+            background: var(--card);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 12px; text-transform: uppercase; font-weight: 600; }
+        input[type="range"] { width: 100%; height: 6px; background: var(--border); border-radius: 3px; -webkit-appearance: none; outline: none; cursor: pointer; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+        .hsl-display {
+            margin-top: 15px;
+            text-align: center;
+            font-family: 'JetBrains Mono';
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+
+        .actions { margin-top: 40px; display: flex; gap: 16px; }
+        button { padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        button.primary { background: var(--accent); color: white; border: none; }
+        button.secondary { background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--border); }
+        button:hover { transform: translateY(-2px); }
+
+        .code-output { margin-top: 40px; background: #000; padding: 24px; border-radius: 16px; border: 1px solid var(--border); width: 100%; max-width: 600px; display: none; }
+        pre { font-family: 'JetBrains Mono'; font-size: 0.85rem; color: #10b981; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Extremes Color Designer</h1>
+        <p>Select a month and use the wheel to design your palette.</p>
+    </header>
+
+    <div class="designer-core" id="grid">
+        <!-- Center Editor -->
+        <div class="center-editor">
+            <div class="wheel-box" id="wheel">
+                <div class="wheel-bg"></div>
+                <div class="wheel-white"></div>
+                <div class="wheel-marker" id="marker"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="slider-container">
+        <div class="slider-label">
+            <span id="monthLabel">January</span>
+            <span id="briVal">50%</span>
+        </div>
+        <input type="range" id="briSlider" min="0" max="100" value="50">
+        <div class="hsl-display" id="hslDisplay">320° 100% 50%</div>
+    </div>
+
+    <div class="actions">
+        <button class="secondary" onclick="resetDefaults()">Reset</button>
+        <button class="primary" onclick="showPythonCode()">Get Python</button>
+        <button class="primary" onclick="showJsCode()">Get JS</button>
+    </div>
+
+    <div class="code-output" id="codeArea">
+        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <span id="codeTitle" style="font-weight: 600; color: var(--text-dim);">Output</span>
+            <button class="secondary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="copyCode()">Copy</button>
+        </div>
+        <pre id="codeText"></pre>
+    </div>
+
+    <script>
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const gridOrder = [0, 1, 2, 3, 7, 11, 15, 14, 13, 12, 8, 4];
+        
+        let months = [];
+        let editIdx = 0;
+
+        function initDefault() {
+            months = [];
+            for (let m = 0; m < 12; m++) {
+                const hue = 320 * (1 - m/11.0);
+                months.push({ h: Math.round(hue), s: 100, l: 50 });
+            }
+        }
+        initDefault();
+
+        function buildGrid() {
+            const grid = document.getElementById('grid');
+            // Clear existing tiles but keep the center editor
+            const tiles = grid.querySelectorAll('.month-tile');
+            tiles.forEach(t => t.remove());
+
+            gridOrder.forEach((gridIdx, monthIdx) => {
+                const tile = document.createElement('div');
+                tile.className = 'month-tile' + (monthIdx === editIdx ? ' active' : '');
+                tile.style.gridArea = `${Math.floor(gridIdx/4) + 1} / ${gridIdx % 4 + 1}`;
+                tile.textContent = monthNames[monthIdx].substring(0, 3);
+                tile.onclick = () => selectMonth(monthIdx);
+                updateTileStyle(tile, months[monthIdx]);
+                grid.appendChild(tile);
+            });
+        }
+
+        function updateTileStyle(tile, m) {
+            tile.style.background = `hsl(${m.h},${m.s}%,${m.l}%)`;
+            tile.style.color = m.l > 60 ? '#000' : '#fff';
+        }
+
+        function selectMonth(i) {
+            editIdx = i;
+            document.getElementById('monthLabel').textContent = monthNames[i];
+            document.getElementById('briSlider').value = months[i].l;
+            document.getElementById('briVal').textContent = months[i].l + '%';
+            buildGrid();
+            syncPicker();
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const m = months[editIdx];
+            document.getElementById('hslDisplay').textContent = `${m.h}° ${m.s}% ${m.l}%`;
+        }
+
+        const wheel = document.getElementById('wheel');
+        const briSlider = document.getElementById('briSlider');
+
+        function pick(e) {
+            const rect = wheel.getBoundingClientRect();
+            const x = (e.clientX || (e.touches && e.touches[0].clientX)) - (rect.left + rect.width/2);
+            const y = (e.clientY || (e.touches && e.touches[0].clientY)) - (rect.top + rect.height/2);
+            
+            let h = Math.atan2(y, x) * (180/Math.PI) + 90;
+            if (h < 0) h += 360;
+            
+            let r_norm = Math.min(1, Math.sqrt(x*x + y*y) / (rect.width/2));
+            
+            months[editIdx].h = Math.round(h);
+            months[editIdx].s = Math.round(r_norm * 100);
+            
+            syncPicker();
+            updateDisplay();
+            const activeTile = document.querySelector('.month-tile.active');
+            if (activeTile) updateTileStyle(activeTile, months[editIdx]);
+        }
+
+        briSlider.oninput = (e) => {
+            const val = parseInt(e.target.value);
+            months[editIdx].l = val;
+            document.getElementById('briVal').textContent = val + '%';
+            updateDisplay();
+            const activeTile = document.querySelector('.month-tile.active');
+            if (activeTile) updateTileStyle(activeTile, months[editIdx]);
+            syncPicker();
+        };
+
+        function syncPicker() {
+            const m = months[editIdx];
+            const ang = (m.h - 90) * (Math.PI/180);
+            const r = (m.s / 100) * 70; // 70 is radius of wheel
+            const marker = document.getElementById('marker');
+            marker.style.left = (70 + r * Math.cos(ang)) + 'px';
+            marker.style.top = (70 + r * Math.sin(ang)) + 'px';
+            marker.style.background = `hsl(${m.h},${m.s}%,${m.l}%)`;
+        }
+
+        wheel.onmousedown = (e) => {
+            pick(e);
+            window.onmousemove = pick;
+            window.onmouseup = () => window.onmousemove = null;
+        };
+        wheel.ontouchmove = (e) => { e.preventDefault(); pick(e); };
+
+        function hslToRgb(h, s, l) {
+            s /= 100; l /= 100;
+            const k = n => (n + h / 30) % 12;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            return [Math.round(255 * f(0)), Math.round(255 * f(8)), Math.round(255 * f(4))];
+        }
+
+        function showPythonCode() {
+            document.getElementById('codeArea').style.display = 'block';
+            document.getElementById('codeTitle').textContent = "build_precip_extremes.py snippet";
+            let code = "def _init_lut():\n    global _color_lut\n    _color_lut = np.array([\n";
+            months.forEach(m => {
+                const rgb = hslToRgb(m.h, m.s, m.l);
+                code += `        [${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 255],\n`;
+            });
+            code += "    ], dtype=np.uint8)";
+            document.getElementById('codeText').textContent = code;
+        }
+
+        function showJsCode() {
+            document.getElementById('codeArea').style.display = 'block';
+            document.getElementById('codeTitle').textContent = "app.js Legend snippet";
+            const grad = months.map(m => {
+                const rgb = hslToRgb(m.h, m.s, m.l);
+                return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+            }).join(', ');
+            document.getElementById('codeText').textContent = `style="background: linear-gradient(to right, ${grad});"`;
+        }
+
+        function copyCode() { 
+            navigator.clipboard.writeText(document.getElementById('codeText').textContent).then(() => alert('Copied!'));
+        }
+
+        function resetDefaults() {
+            if(confirm("Reset all?")) { initDefault(); selectMonth(0); }
+        }
+
+        buildGrid();
+        selectMonth(0);
+    </script>
+</body>
+</html>

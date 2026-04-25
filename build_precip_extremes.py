@@ -17,18 +17,20 @@ _current_loaded_era = None
 
 def _init_lut():
     global _color_lut
-    _color_lut = np.zeros((12, 4), dtype=np.uint8)
-    for m in range(12):
-        hue = 320 * (1 - m/11.0)
-        c = 1.0 # chroma
-        x = c * (1 - abs((hue / 60.0) % 2 - 1))
-        if 0 <= hue < 60: r,g,b = c,x,0
-        elif 60 <= hue < 120: r,g,b = x,c,0
-        elif 120 <= hue < 180: r,g,b = 0,c,x
-        elif 180 <= hue < 240: r,g,b = 0,x,c
-        elif 240 <= hue < 300: r,g,b = x,0,c
-        else: r,g,b = c,0,x
-        _color_lut[m] = [int(r*255), int(g*255), int(b*255), 255]
+    _color_lut = np.array([
+        [146, 7, 65, 255],
+        [153, 0, 150, 255],
+        [92, 0, 153, 255],
+        [0, 69, 153, 255],
+        [5, 115, 148, 255],
+        [2, 151, 111, 255],
+        [2, 151, 64, 255],
+        [10, 153, 0, 255],
+        [153, 143, 0, 255],
+        [153, 99, 0, 255],
+        [151, 59, 2, 255],
+        [153, 0, 0, 255],
+    ], dtype=np.uint8)
 
 def fill_missing(data, invalid=None):
     if invalid is None:
