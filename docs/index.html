@@ -27,6 +27,15 @@
       </div>
     </div>
     <div class="controls">
+      <button id="mobile-search-btn" title="Search"
+        style="background:none; border:none; display:none; align-items:center; padding: 0 5px; cursor:pointer;"
+        onclick="openMobileSearch()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </button>
       <div id="search-container" style="position: relative;">
         <input type="text" id="location-search" placeholder="Search places..." autocomplete="off" style="width: 200px; box-sizing: border-box;">
         <div id="search-results" class="settings-content" style="top: 32px; left: 0; right: auto; min-width: 200px; padding: 0; display: none; overflow: hidden;"></div>
@@ -142,6 +151,14 @@
         <!-- Dynamic Legend Injection -->
       </div>
     </div>
+  </div>
+
+  <div id="mobile-search-modal" class="mobile-overlay" style="display:none;">
+    <div class="mobile-search-header">
+      <input type="text" id="mobile-search-input" placeholder="Search places..." autocomplete="off">
+      <button class="close-overlay" onclick="closeMobileSearch()">Cancel</button>
+    </div>
+    <div id="mobile-search-results" class="mobile-results"></div>
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>

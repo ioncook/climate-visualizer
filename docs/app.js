@@ -233,7 +233,7 @@ function updateBorders() {
         id: 'borders-layer',
         type: 'line',
         source: 'borders-source',
-        paint: { 'line-color': '#000000', 'line-width': 1.5, 'line-opacity': 1.0 }
+        paint: { 'line-color': '#000000', 'line-width': 1.0, 'line-opacity': 1.0 }
       });
     }
     map.setLayoutProperty('borders-layer', 'visibility', 'visible');
@@ -678,6 +678,70 @@ searchResults.addEventListener('click', (e) => {
 document.addEventListener('click', (e) => {
   if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
     searchResults.style.display = 'none';
+  }
+});
+
+// Mobile Search Logic
+window.openMobileSearch = () => {
+  const modal = document.getElementById('mobile-search-modal');
+  modal.style.display = 'flex';
+  document.getElementById('mobile-search-input').focus();
+};
+
+window.closeMobileSearch = () => {
+  const modal = document.getElementById('mobile-search-modal');
+  modal.style.display = 'none';
+  document.getElementById('mobile-search-input').value = '';
+  document.getElementById('mobile-search-results').innerHTML = '';
+};
+
+const mobileSearchInput = document.getElementById('mobile-search-input');
+const mobileSearchResults = document.getElementById('mobile-search-results');
+let mobileSearchTimeout;
+
+mobileSearchInput.addEventListener('input', (e) => {
+  clearTimeout(mobileSearchTimeout);
+  const q = e.target.value.trim();
+  if (q.length < 3) {
+    mobileSearchResults.innerHTML = '';
+    return;
+  }
+  mobileSearchTimeout = setTimeout(() => {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.length === 0) {
+          mobileSearchResults.innerHTML = '<div style="padding: 15px 20px; font-size: 14px; color: var(--text-dim);">No results found</div>';
+        } else {
+          mobileSearchResults.innerHTML = data.map(item => `
+            <div class="mobile-result-item" data-lat="${item.lat}" data-lon="${item.lon}">
+              ${item.display_name}
+            </div>
+          `).join('');
+        }
+      })
+      .catch(err => console.error('Search error:', err));
+  }, 400);
+});
+
+mobileSearchResults.addEventListener('click', (e) => {
+  const item = e.target.closest('.mobile-result-item');
+  if (item) {
+    const lat = parseFloat(item.dataset.lat);
+    const lon = parseFloat(item.dataset.lon);
+    triggerLocationQuery(lat, lon);
+    map.jumpTo({ center: [lon, lat], zoom: 8 });
+    closeMobileSearch();
+  }
+});
+
+mobileSearchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const firstResult = mobileSearchResults.querySelector('.mobile-result-item');
+    if (firstResult) {
+      firstResult.click();
+    }
   }
 });
 
