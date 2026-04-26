@@ -36,8 +36,7 @@ ___
 
 ### 3D Relief and Hillshade
  > Toggle on to enable 3D relief and hillshade.
- - 3D relief is not available in Globe projection on mobile
- - 3D relief is also not very performant, if you are having trouble with the map lagging, try toggling it off
+ - 3D relief is not very performant, if you are having trouble with the map lagging, try toggling it off
 
 ### 3D Exaggeration
  > Multiply the height of the 3D terrain.
@@ -64,8 +63,8 @@ ___
  - The text next to the code is the description of the universal thermal scale letters
 
 ### Middle Click Navigation
- - Hold middle click and drag up and down to zoom in and out
- - Hold middle click and drag left and right to rotate the view
+ - Hold/Click the mouse wheel and drag up and down to zoom in and out
+ - Hold/Click the mouse wheel and drag left and right to rotate the view
 
 ___
  

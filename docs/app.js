@@ -179,25 +179,15 @@ function applyTerrainState() {
   const isGlobe = projectionSelect.value === 'globe';
 
   if (show) {
-    if (isMobile && isGlobe) {
-      if (exInput.type !== 'text') {
-        exInput.dataset.prev = exInput.value;
-        exInput.type = 'text';
-      }
-      exInput.value = '0 (Globe)';
-      exInput.disabled = true;
-      map.setTerrain(null);
-    } else {
-      if (exInput.type === 'text') {
-        exInput.type = 'number';
-        exInput.value = exInput.dataset.prev || '2.0';
-      }
-      exInput.disabled = false;
-      let exVal = parseFloat(exInput.value);
-      if (isNaN(exVal)) exVal = 0;
-      if (exVal > 0) map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
-      else map.setTerrain(null);
+    if (exInput.type === 'text') {
+      exInput.type = 'number';
+      exInput.value = exInput.dataset.prev || '2.0';
     }
+    exInput.disabled = false;
+    let exVal = parseFloat(exInput.value);
+    if (isNaN(exVal)) exVal = 0;
+    if (exVal > 0) map.setTerrain({ 'source': 'terrain-source', 'exaggeration': exVal });
+    else map.setTerrain(null);
   } else {
     if (exInput.type === 'text') {
       exInput.type = 'number';
@@ -212,6 +202,50 @@ function applyTerrainState() {
     globeOpt.text = 'Globe';
   }
 }
+
+// --- Mobile Globe + Terrain: Fix post-touch camera snap ---
+// MapLibre freezes terrain elevation correction during touch gestures,
+// then re-anchors on touchend, causing a visible jump. We intercept
+// touchend, cancel MapLibre's snap, and restore the last known good state.
+(function installTerrainTouchFix() {
+  let lastTouchState = null;
+  let isTouching = false;
+
+  map.getCanvas().addEventListener('touchmove', () => {
+    if (isTouching) {
+      lastTouchState = {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch()
+      };
+    }
+  }, { passive: true });
+
+  map.getCanvas().addEventListener('touchstart', () => {
+    isTouching = true;
+    lastTouchState = null;
+  }, { passive: true });
+
+  map.getCanvas().addEventListener('touchend', () => {
+    isTouching = false;
+    if (!lastTouchState) return;
+    const terrain = map.getTerrain();
+    const isGlobe = projectionSelect.value === 'globe';
+    if (!terrain || !isGlobe) return;
+    // Capture state synchronously, then on next frame stop and lock
+    const snap = { ...lastTouchState };
+    requestAnimationFrame(() => {
+      map.stop();
+      map.jumpTo({
+        center: snap.center,
+        zoom: snap.zoom,
+        bearing: snap.bearing,
+        pitch: snap.pitch
+      });
+    });
+  }, { passive: true });
+})();
 
 function updateBorders() {
   const mode = document.getElementById('borders-select').value;
