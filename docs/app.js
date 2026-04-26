@@ -66,7 +66,7 @@ const map = new maplibregl.Map({
   pixelRatio: Math.min(window.devicePixelRatio, 2),
   projection: 'globe',
   antialias: false,
-  trackResize: false,
+  trackResize: true,
   collectResourceTiming: false,
   attributionControl: true,
 
@@ -83,6 +83,10 @@ const map = new maplibregl.Map({
       }
     }
   }
+});
+
+window.addEventListener('resize', () => {
+  map.resize();
 });
 
 const BASEMAPS = {
