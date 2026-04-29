@@ -139,9 +139,15 @@ button {
 #layer-title {
   font-size: 14px;
   font-weight: 700;
-  margin-bottom: 5px;
+  margin-bottom: 2px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  color: #d0d0d0;
+  text-shadow:
+    -1px -1px 0 #111,
+     1px -1px 0 #111,
+    -1px  1px 0 #111,
+     1px  1px 0 #111;
 }
 
 .legend-bar {
@@ -162,7 +168,12 @@ button {
   width: 250px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-dim);
+  color: #d0d0d0;
+  text-shadow:
+    -1px -1px 0 #111,
+     1px -1px 0 #111,
+    -1px  1px 0 #111,
+     1px  1px 0 #111;
 }
 
 .maplibregl-popup {

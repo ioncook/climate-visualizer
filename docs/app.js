@@ -209,40 +209,33 @@ function applyTerrainState() {
 // touchend, cancel MapLibre's snap, and restore the last known good state.
 (function installTerrainTouchFix() {
   let lastTouchState = null;
-  let isTouching = false;
+  let wasMultiTouch = false;
 
-  map.getCanvas().addEventListener('touchmove', () => {
-    if (isTouching) {
-      lastTouchState = {
-        center: map.getCenter(),
-        zoom: map.getZoom(),
-        bearing: map.getBearing(),
-        pitch: map.getPitch()
-      };
-    }
-  }, { passive: true });
-
-  map.getCanvas().addEventListener('touchstart', () => {
-    isTouching = true;
+  map.getCanvas().addEventListener('touchstart', (e) => {
+    if (e.touches.length >= 2) wasMultiTouch = true;
     lastTouchState = null;
   }, { passive: true });
 
+  map.getCanvas().addEventListener('touchmove', (e) => {
+    if (e.touches.length >= 2) wasMultiTouch = true;
+    lastTouchState = {
+      center: map.getCenter(),
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch()
+    };
+  }, { passive: true });
+
   map.getCanvas().addEventListener('touchend', () => {
-    isTouching = false;
-    if (!lastTouchState) return;
+    if (!wasMultiTouch || !lastTouchState) { wasMultiTouch = false; return; }
+    wasMultiTouch = false;
     const terrain = map.getTerrain();
     const isGlobe = projectionSelect.value === 'globe';
     if (!terrain || !isGlobe) return;
-    // Capture state synchronously, then on next frame stop and lock
     const snap = { ...lastTouchState };
     requestAnimationFrame(() => {
       map.stop();
-      map.jumpTo({
-        center: snap.center,
-        zoom: snap.zoom,
-        bearing: snap.bearing,
-        pitch: snap.pitch
-      });
+      map.jumpTo({ center: snap.center, zoom: snap.zoom, bearing: snap.bearing, pitch: snap.pitch });
     });
   }, { passive: true });
 })();
