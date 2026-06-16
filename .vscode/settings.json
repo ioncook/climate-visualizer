@@ -1,0 +1,27 @@
+{
+  "files.exclude": {
+    "docs/1901_1930": true,
+    "docs/1931_1960": true,
+    "docs/1961_1990": true,
+    "docs/1991_2020": true,
+    "docs/compare": true,
+    "All data": true,
+    "climate_venv": true
+  },
+  "files.watcherExclude": {
+    "**/docs/1901_1930/**": true,
+    "**/docs/1931_1960/**": true,
+    "**/docs/1961_1990/**": true,
+    "**/docs/1991_2020/**": true,
+    "**/docs/compare/**": true,
+    "**/All data/**": true,
+    "**/climate_venv/**": true
+  },
+  "search.exclude": {
+    "docs/1901_1930": true,
+    "docs/1931_1960": true,
+    "docs/1961_1990": true,
+    "docs/1991_2020": true,
+    "docs/compare": true
+  }
+}
