@@ -1,0 +1,201 @@
+import os
+import json
+import math
+import numpy as np
+import netCDF4
+from PIL import Image
+import colorsys
+import multiprocessing
+import gc
+from scipy import ndimage
+
+# Config
+Z_MAX = 7
+OUT_DIR = 'docs'
+ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
+MAX_WORKERS = 2
+
+_era_data_cache = {}
+_k_lut = None
+
+def fill_missing(data, invalid=None):
+    if invalid is None:
+        invalid = np.isnan(data)
+    if not np.any(invalid): return data
+    ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+    return data[tuple(ind)]
+
+def _init_luts():
+    global _k_lut
+    _k_lut = np.zeros((61, 4), dtype=np.uint8)
+    lut = {
+        0: [0, 255, 0, 255], 1: [0, 255, 255, 255], 2: [0, 0, 255, 255], 3: [128, 0, 255, 255],
+        -1: [255, 255, 0, 255], -2: [255, 128, 0, 255], -3: [255, 0, 0, 255]
+    }
+    for diff in range(-30, 31):
+        idx = diff + 30
+        d = max(-3, min(3, diff))
+        _k_lut[idx] = lut.get(d, lut[0])
+
+def _hsl_array_to_rgba(H_deg, void_mask, water_mask):
+    H = H_deg / 360.0
+    q = np.full_like(H, 1.0)
+    p = np.zeros_like(H)
+    def htr(t):
+        t = np.where(t < 0.0, t + 1.0, t)
+        t = np.where(t > 1.0, t - 1.0, t)
+        return np.select([t < 1/6.0, t < 1/2.0, t < 2/3.0], [p+(q-p)*6.0*t, q, p+(q-p)*(2/3.0-t)*6.0], default=p)
+    R, G, B = htr(H+1/3.0), htr(H), htr(H-1/3.0)
+    arr = np.stack([(R*255).astype(np.uint8), (G*255).astype(np.uint8), (B*255).astype(np.uint8), np.full(H.shape, 255, dtype=np.uint8)], axis=-1)
+    arr[void_mask | water_mask] = [0, 0, 0, 0]
+    return arr
+
+def get_temp_color_array(t1, t2, void_mask, water_mask):
+    diff_f = (t2 - t1) * 1.8
+    pos_n, neg_n = np.clip(diff_f / 3.0, 0, 1), np.clip(np.abs(diff_f) / 1.5, 0, 1)
+    hue = np.where(diff_f >= 0, 120.0 * (1.0 - pos_n), 120.0 + 120.0 * neg_n)
+    return _hsl_array_to_rgba(hue, void_mask, water_mask)
+
+def get_precip_color_array(p1, p2, void_mask, water_mask):
+    denom = np.maximum(np.abs(p1), 1.0)
+    diff_pct = (p2 - p1) / denom * 100.0
+    mag = np.log10(np.abs(diff_pct) + 1.0)
+    norm_mag = np.clip(mag / 2.0, 0.0, 1.0)
+    hue = np.where(diff_pct > 0, 120.0 + 120.0 * norm_mag, 120.0 * (1.0 - norm_mag))
+    hue[np.abs(diff_pct) < 1.0] = 120.0
+    return _hsl_array_to_rgba(hue, void_mask, water_mask)
+
+def _gen_arrays(z, x, y):
+    num_tiles = 2 ** z
+    map_size = 256 * num_tiles
+    px, py = x * 256 + np.arange(256), y * 256 + np.arange(256)
+    lons = 360 * ((px / map_size) - 0.5)
+    y_norm = 0.5 - (py / map_size)
+    lats = 90 - 360 * np.arctan(np.exp(-y_norm * 2 * np.pi)) / np.pi
+    return lons, lats
+
+def get_era_raw_data(era_name):
+    global _era_data_cache
+    if era_name not in _era_data_cache:
+        print(f"[{os.getpid()}] Worker loading raw data for {era_name}...")
+        ds = netCDF4.Dataset(f'All data/climate_data_0p1/{era_name}/ensemble_mean_0p1.nc')
+        ds_k = netCDF4.Dataset(f'All data/koppen_geiger_nc/{era_name}/koppen_geiger_0p00833333.nc')
+        v_k = [v for v in ds_k.variables.keys() if 'kg_class' in v.lower()][0]
+        
+        # Convert masked arrays to plain ndarrays with NaN for missing values.
+        # np.mean() on a masked array returns a masked array where masked pixels
+        # have a fill value (e.g. 9.96921e+36) that is NOT NaN. Without this
+        # conversion those fill values pass through fill_missing/nan_to_num
+        # unchanged and produce garbage colors in the tile output.
+        t_mean = np.ma.filled(np.mean(ds.variables['air_temperature'][:], axis=0), np.nan)
+        p_mean = np.ma.filled(np.mean(ds.variables['precipitation'][:], axis=0), np.nan)
+        
+        k = np.nan_to_num(ds_k.variables[v_k][:], 0).astype(np.int8)
+        _era_data_cache[era_name] = {'mT': t_mean, 'mP': p_mean, 'k': k, 'shape': t_mean.shape, 'mshape': k.shape}
+        ds.close(); ds_k.close(); gc.collect()
+    return _era_data_cache[era_name]
+
+_compare_cache = {}
+
+def process_compare_task(args):
+    z, x, y, era1, era2 = args
+    global _compare_cache
+    
+    pair_key = tuple(sorted([era1, era2]))
+    if pair_key not in _compare_cache:
+        d1_raw = get_era_raw_data(era1)
+        d2_raw = get_era_raw_data(era2)
+        
+        t1, t2 = d1_raw['mT'].copy(), d2_raw['mT'].copy()
+        p1, p2 = d1_raw['mP'].copy(), d2_raw['mP'].copy()
+        
+        # Shared mask: if either era is missing data, fill both from the same neighbor.
+        invalid_t = np.isnan(t1) | np.isnan(t2)
+        if hasattr(t1, 'mask'): invalid_t |= t1.mask
+        if hasattr(t2, 'mask'): invalid_t |= t2.mask
+        
+        invalid_p = np.isnan(p1) | np.isnan(p2)
+        if hasattr(p1, 'mask'): invalid_p |= p1.mask
+        if hasattr(p2, 'mask'): invalid_p |= p2.mask
+        
+        t1 = fill_missing(t1, invalid_t)
+        t2 = fill_missing(t2, invalid_t)
+        p1 = fill_missing(p1, invalid_p)
+        p2 = fill_missing(p2, invalid_p)
+        
+        np.nan_to_num(t1, copy=False, nan=0.0)
+        np.nan_to_num(t2, copy=False, nan=0.0)
+        np.nan_to_num(p1, copy=False, nan=0.0)
+        np.nan_to_num(p2, copy=False, nan=0.0)
+        
+        _compare_cache[pair_key] = {
+            't1': t1, 't2': t2, 'p1': p1, 'p2': p2,
+            'k1': d1_raw['k'], 'k2': d2_raw['k'],
+            'shape': d1_raw['shape'], 'mshape': d1_raw['mshape']
+        }
+
+    c = _compare_cache[pair_key]
+    comp_dir = os.path.join(OUT_DIR, 'compare', f'{era1}_{era2}')
+    koppen_path = os.path.join(comp_dir, f'tiles_koppen/{z}/{x}/{y}.png')
+    precip_path = os.path.join(comp_dir, f'tiles_precip/12/{z}/{x}/{y}.png')
+    temp_path = os.path.join(comp_dir, f'tiles_temp/12/{z}/{x}/{y}.png')
+    
+    lons, lats = _gen_arrays(z, x, y)
+    E_H, E_W = c['shape']; H, W = c['mshape']
+    lon_idx = np.floor((lons + 180) / 360 * E_W).astype(int) % E_W
+    lon_1km = np.floor((lons + 180) / 360 * W).astype(int) % W
+    lat_idx_raw = np.floor((90 - lats) / 180 * E_H).astype(int)
+    lat_1km_raw = np.floor((90 - lats) / 180 * H).astype(int)
+    lat_idx, lat_1km = np.clip(lat_idx_raw, 0, E_H - 1), np.clip(lat_1km_raw, 0, H - 1)
+    LON_IDX, LAT_IDX = np.meshgrid(lon_idx, lat_idx)
+    LON_1KM, LAT_1KM = np.meshgrid(lon_1km, lat_1km)
+    
+    water_mask = c['k1'][LAT_1KM, LON_1KM] == 0
+    void_mask = np.logical_not((lat_idx_raw >= 0) & (lat_idx_raw < E_H))
+    _, VOID_GRID = np.meshgrid(lon_idx, void_mask)
+
+    if not os.path.exists(koppen_path):
+        os.makedirs(os.path.dirname(koppen_path), exist_ok=True)
+        diff_k = np.clip(c['k2'][LAT_1KM, LON_1KM].astype(int) - c['k1'][LAT_1KM, LON_1KM].astype(int), -30, 30) + 30
+        img_k = _k_lut[diff_k].copy(); img_k[VOID_GRID | water_mask] = [0, 0, 0, 0]
+        if np.any(img_k[:,:,3] > 0): Image.fromarray(img_k, 'RGBA').save(koppen_path)
+    if not os.path.exists(precip_path):
+        os.makedirs(os.path.dirname(precip_path), exist_ok=True)
+        img_p = get_precip_color_array(c['p1'][LAT_IDX, LON_IDX], c['p2'][LAT_IDX, LON_IDX], VOID_GRID, water_mask)
+        if np.any(img_p[:,:,3] > 0): Image.fromarray(img_p, 'RGBA').save(precip_path)
+    if not os.path.exists(temp_path):
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        img_t = get_temp_color_array(c['t1'][LAT_IDX, LON_IDX], c['t2'][LAT_IDX, LON_IDX], VOID_GRID, water_mask)
+        if np.any(img_t[:,:,3] > 0): Image.fromarray(img_t, 'RGBA').save(temp_path)
+    return True
+
+def _init_worker():
+    _init_luts()
+
+if __name__ == "__main__":
+    print(f"Comparison Builder (using {MAX_WORKERS} workers)")
+    for i in range(len(ERAS)):
+        for j in range(i + 1, len(ERAS)):
+            era1, era2 = ERAS[i], ERAS[j]
+            print(f"\nScanning for {era1} vs {era2}...")
+            pair_tasks = []
+            for z in range(Z_MAX + 1):
+                for x in range(2**z):
+                    for y in range(2**z):
+                        t_path = os.path.join(OUT_DIR, 'compare', f'{era1}_{era2}', f'tiles_temp/12/{z}/{x}/{y}.png')
+                        if not os.path.exists(t_path):
+                            pair_tasks.append((z, x, y, era1, era2))
+            if not pair_tasks:
+                print(f"  > {era1} vs {era2}: already done, skipping.")
+                continue
+            print(f"  > {len(pair_tasks)} missing tiles. Building...")
+            # Use a fresh pool per pair so workers are killed between pairs,
+            # freeing all cached data and preventing OOM on large machines.
+            with multiprocessing.Pool(processes=MAX_WORKERS, initializer=_init_worker) as pool:
+                count = 0
+                for _ in pool.imap_unordered(process_compare_task, pair_tasks, chunksize=10):
+                    count += 1
+                    if count % 200 == 0: print(f"  Done: {count}/{len(pair_tasks)}", flush=True)
+            print(f"  > {era1} vs {era2}: DONE")
+            gc.collect()
+    print("\nALL COMPARISONS DONE")

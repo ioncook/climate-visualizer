@@ -1,0 +1,153 @@
+import os
+import numpy as np
+import netCDF4
+from PIL import Image
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import gc
+from scipy import ndimage
+
+# Config
+Z_MAX = 7
+OUT_DIR = 'docs'
+MAX_WORKERS = 2
+
+_era_data = None
+_color_lut = None
+_current_loaded_era = None
+
+def _init_lut():
+    global _color_lut
+    _color_lut = np.array([
+        [194, 9, 86, 255],
+        [204, 0, 199, 255],
+        [122, 0, 204, 255],
+        [0, 91, 204, 255],
+        [6, 151, 197, 255],
+        [2, 201, 148, 255],
+        [2, 201, 33, 255],
+        [146, 204, 0, 255],
+        [204, 162, 0, 255],
+        [204, 118, 0, 255],
+        [204, 61, 0, 255],
+        [204, 0, 0, 255],
+    ], dtype=np.uint8)
+
+def fill_missing(data, invalid=None):
+    if invalid is None:
+        invalid = (data == 0) | np.isnan(data)
+    else:
+        invalid = invalid | (data == 0)
+    if not np.any(invalid): return data
+    ind = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+    return data[tuple(ind)]
+
+def _init_worker():
+    _init_lut()
+
+def _gen_arrays(z, x, y):
+    num_tiles = 2 ** z
+    map_size = 256 * num_tiles
+    px = x * 256 + np.arange(256)
+    x_norm = (px / map_size) - 0.5
+    lons = 360 * x_norm
+    py = y * 256 + np.arange(256)
+    y_norm = 0.5 - (py / map_size)
+    lats = 90 - 360 * np.arctan(np.exp(-y_norm * 2 * np.pi)) / np.pi
+    return lons, lats
+
+def process_extreme_task(args):
+    z, x, y, era = args
+    global _era_data, _current_loaded_era
+    
+    if _era_data is None or _current_loaded_era != era:
+        ens_path = f'All data/climate_data_0p1/{era}/ensemble_mean_0p1.nc'
+        k_path = f'All data/koppen_geiger_nc/{era}/koppen_geiger_0p00833333.nc'
+        
+        if not os.path.exists(ens_path) or not os.path.exists(k_path):
+            print(f"Missing data for {era}: {ens_path} or {k_path}")
+            return False
+
+        ds = netCDF4.Dataset(ens_path)
+        v_p = ds.variables['precipitation']
+        p = v_p[:12]
+        np.nan_to_num(p, copy=False, nan=0.0)
+        for m in range(p.shape[0]):
+            p[m] = fill_missing(p[m], v_p[m].mask if hasattr(v_p, 'mask') else None)
+        ds.close()
+        
+        ds_k = netCDF4.Dataset(k_path)
+        v_k = [v for v in ds_k.variables.keys() if 'kg_class' in v.lower()][0]
+        m_k = np.nan_to_num(ds_k.variables[v_k][:], 0).astype(np.uint8)
+        ds_k.close()
+        
+        _era_data = {
+            'max_idx': np.argmax(p, axis=0),
+            'min_idx': np.argmin(p, axis=0),
+            'k': m_k,
+            'shape': (p.shape[1], p.shape[2]),
+            'm_shape': m_k.shape
+        }
+        _current_loaded_era = era
+        gc.collect()
+
+    era_dir = os.path.join(OUT_DIR, era)
+    max_path = os.path.join(era_dir, f'tiles_precip_max/{z}/{x}/{y}.png')
+    min_path = os.path.join(era_dir, f'tiles_precip_min/{z}/{x}/{y}.png')
+
+    if os.path.exists(max_path) and os.path.exists(min_path):
+        return True
+
+    lons, lats = _gen_arrays(z, x, y)
+    E_H, E_W = _era_data['shape']
+    H, W = _era_data['m_shape']
+    
+    lon_idx = np.floor((lons + 180) / 360 * E_W).astype(int) % E_W
+    lon_1km = np.floor((lons + 180) / 360 * W).astype(int) % W
+    lat_idx_raw = np.floor((90 - lats) / 180 * E_H).astype(int)
+    lat_1km_raw = np.floor((90 - lats) / 180 * H).astype(int)
+    lat_idx, lat_1km = np.clip(lat_idx_raw, 0, E_H - 1), np.clip(lat_1km_raw, 0, H - 1)
+    
+    LON_IDX, LAT_IDX = np.meshgrid(lon_idx, lat_idx)
+    LON_1KM, LAT_1KM = np.meshgrid(lon_1km, lat_1km)
+    LAT_VALID = (lat_idx_raw >= 0) & (lat_idx_raw < E_H)
+    _, LAT_VALID_GRID = np.meshgrid(lon_idx, LAT_VALID)
+    
+    water_mask = _era_data['k'][LAT_1KM, LON_1KM] == 0
+    void_mask = np.logical_not(LAT_VALID_GRID)
+
+    os.makedirs(os.path.dirname(max_path), exist_ok=True)
+    os.makedirs(os.path.dirname(min_path), exist_ok=True)
+
+    # 1. MAX
+    if not os.path.exists(max_path):
+        m_idx = _era_data['max_idx'][LAT_IDX, LON_IDX]
+        img = _color_lut[m_idx].copy()
+        img[water_mask] = img[void_mask] = [0, 0, 0, 0]
+        if np.any(img[:,:,3] > 0):
+            Image.fromarray(img, 'RGBA').save(max_path)
+
+    # 2. MIN
+    if not os.path.exists(min_path):
+        m_idx = _era_data['min_idx'][LAT_IDX, LON_IDX]
+        img = _color_lut[m_idx].copy()
+        img[water_mask] = img[void_mask] = [0, 0, 0, 0]
+        if np.any(img[:,:,3] > 0):
+            Image.fromarray(img, 'RGBA').save(min_path)
+
+    return True
+
+if __name__ == "__main__":
+    ERAS = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"]
+    for era in ERAS:
+        print(f"Building Precip Extremes for {era}")
+        all_tasks = [(z, x, y, era) for z in range(Z_MAX+1) for x in range(2**z) for y in range(2**z)]
+        
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS, initializer=_init_worker) as executor:
+            futures = {executor.submit(process_extreme_task, t): t for t in all_tasks}
+            count = 0
+            for f in as_completed(futures):
+                count += 1
+                if count % 1000 == 0:
+                    print(f"[{era}] Done: {count}/{len(all_tasks)}")
+    
+    print("ALL ERAS EXTREMES DONE")

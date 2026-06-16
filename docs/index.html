@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Climate Visualizer</title>
+  <link rel="icon" href="favicon.png" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="style.css?v=4" />
+</head>
+
+<body>
+  <div id="nav-crosshair"></div>
+  <div class="header-bar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <a href="https://github.com/ioncook/climate-visualizer" target="_blank"
+        style="display: flex; align-items: center;">
+        <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
+      </a>
+      <h2 style="margin:0; font-size: 18px; white-space: nowrap;">Climate Visualizer</h2>
+      <div class="source-info"
+        style="display: flex; flex-direction: column; gap: 1px; margin-left: 8px; line-height: 1.1;">
+        <span id="status" style="font-size: 11px; color:#555;">Ready</span>
+        <a href="https://github.com/ioncook/climate-visualizer" target="_blank"
+          style="font-size: 10px; color: #444; text-decoration: none;">View Source</a>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="mobile-search-btn" title="Search"
+        style="background:none; border:none; display:none; align-items:center; padding: 0 5px; cursor:pointer;"
+        onclick="openMobileSearch()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </button>
+      <div id="search-container" style="position: relative;">
+        <input type="text" id="location-search" placeholder="Search places..." autocomplete="off"
+          style="width: 200px; box-sizing: border-box;">
+        <div id="search-results" class="settings-content"
+          style="top: 32px; left: 0; right: auto; min-width: 200px; padding: 0; display: none; overflow: hidden;"></div>
+      </div>
+      <select id="era">
+        <option value="1901_1930">1901-1930 Averages</option>
+        <option value="1931_1960">1931-1960 Averages</option>
+        <option value="1961_1990">1961-1990 Averages</option>
+        <option value="1991_2020" selected>1991-2020 Averages</option>
+      </select>
+      <select id="compare" title="Only applies to Annual data">
+        <option value="none" selected>Compare to...</option>
+        <option value="1901_1930">1901-1930 Averages</option>
+        <option value="1931_1960">1931-1960 Averages</option>
+        <option value="1961_1990">1961-1990 Averages</option>
+        <option value="1991_2020">1991-2020 Averages</option>
+      </select>
+      <div class="settings-dropdown" style="display:flex; align-items:center;">
+
+        <button onclick="window.location.href=window.location.pathname" title="Reset View"
+          style="background:none; border:none; padding: 0 5px; cursor:pointer; display:flex; align-items:center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
+        <button id="settings-btn"
+          style="background:none; border:none; display:flex; align-items:center; padding: 0 5px; cursor:pointer;"
+          onclick="toggleSettings(event)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
+          </svg>
+        </button>
+        <div id="settings-menu" class="settings-content">
+          <div class="setting-row">
+            <span>Theme</span>
+            <select id="theme">
+              <option value="dark">Dark Mode</option>
+              <option value="light">Light Mode</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <span>Basemap</span>
+            <select id="basemap">
+              <option value="dark">Dark Matter</option>
+              <option value="topo">Topography</option>
+              <option value="light">Clean Light Map</option>
+              <option value="osm">Open Street Map</option>
+              <option value="satellite">Satellite</option>
+              <option value="none">Plain Black</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <span>Projection</span>
+            <select id="projection">
+              <option value="globe">Globe</option>
+              <option value="mercator">Flat</option>
+            </select>
+          </div>
+          <hr style="border:0; border-top: 1px solid var(--border); margin: 8px 0;">
+          <div class="setting-row">
+            <span>Units</span>
+            <select id="units">
+              <option value="imperial">Imperial (°F, in)</option>
+              <option value="metric">Metric (°C, mm)</option>
+            </select>
+          </div>
+          <div class="setting-row" id="opacity-row">
+            <span>Climate Opacity</span>
+            <input type="range" id="layer-opacity" min="0" max="100" value="75" style="width: 100px;">
+          </div>
+          <div class="setting-row">
+            <span>Terrain</span>
+            <select id="terrain-select">
+              <option value="off">Off</option>
+              <option value="hillshade">Hillshade</option>
+              <option value="3d">3D Terrain</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <span>3D Exaggeration</span>
+            <input type="number" id="terrain-exaggeration" step="0.1" min="0" max="20" value="2.0"
+              style="width: 60px; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:2px 5px;">
+          </div>
+          <div class="setting-row">
+            <span>Borders</span>
+            <select id="borders-select">
+              <option value="off">Off</option>
+              <option value="national">National</option>
+              <option value="state">Subnational</option>
+            </select>
+          </div>
+          <div class="setting-row" id="mobile-pin-row">
+            <span>Mobile Pin Style</span>
+            <select id="mobile-pin-style">
+              <option value="classic">Classic</option>
+              <option value="contrast">High Contrast</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map" style="position: relative;">
+    <div class="legend-container">
+      <div id="layer-title">Köppen Classification</div>
+      <div id="legend-content" class="legend-bar">
+        <!-- Dynamic Legend Injection -->
+      </div>
+    </div>
+  </div>
+
+  <div id="mobile-search-modal" class="mobile-overlay" style="display:none;">
+    <div class="mobile-search-header">
+      <input type="text" id="mobile-search-input" placeholder="Search places..." autocomplete="off">
+      <button class="close-overlay" onclick="closeMobileSearch()">Cancel</button>
+    </div>
+    <div id="mobile-search-results" class="mobile-results"></div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>
+  <script src="app.js?v=12"></script>
+</body>
+
+</html>
+
+</html>
