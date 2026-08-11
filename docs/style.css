@@ -176,9 +176,11 @@ button {
      1px  1px 0 #111;
 }
 
-.maplibregl-popup {
+.maplibregl-popup,
+.maplibregl-marker {
   z-index: 2000 !important;
   filter: drop-shadow(0 0 1px var(--border)) drop-shadow(0 4px 8px var(--shadow));
+  transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 
 .maplibregl-popup-content {

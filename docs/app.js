@@ -90,6 +90,116 @@ window.addEventListener('resize', () => {
   map.resize();
 });
 
+function isLocationVisible(latLng) {
+  if (!latLng || isNaN(latLng.lat) || isNaN(latLng.lng)) return false;
+  if (!map || !map.transform) return false;
+
+  const mapLngLat = maplibregl.LngLat.convert([latLng.lng, latLng.lat]);
+
+  // 1. Clip space W (behind camera plane) check
+  let w = 1;
+  const isGlobe = (projectionSelect && projectionSelect.value === 'globe') || (map.transform && map.transform.isGlobeRendering);
+  
+  if (isGlobe) {
+    const globMat = map.transform._globeViewProjMatrixNoCorrection ||
+      (map.transform.currentTransform && map.transform.currentTransform._globeViewProjMatrixNoCorrection);
+    if (globMat) {
+      const radLat = latLng.lat * Math.PI / 180;
+      const radLng = latLng.lng * Math.PI / 180;
+      const cosLat = Math.cos(radLat);
+      const x = Math.sin(radLng) * cosLat;
+      const y = Math.sin(radLat);
+      const z = Math.cos(radLng) * cosLat;
+      w = x * globMat[3] + y * globMat[7] + z * globMat[11] + globMat[15];
+    }
+  } else {
+    const pixMat = map.transform._pixelMatrix3D || map.transform._pixelMatrix;
+    if (pixMat) {
+      const worldSize = map.transform.worldSize;
+      const mx = (latLng.lng + 180) / 360 * worldSize;
+      const radLat = latLng.lat * Math.PI / 180;
+      const my = (1 - Math.log(Math.tan(radLat) + 1 / Math.cos(radLat)) / Math.PI) / 2 * worldSize;
+      w = mx * pixMat[3] + my * pixMat[7] + pixMat[15];
+    }
+  }
+
+  // If W <= 0, point is behind camera plane
+  if (w <= 0) return false;
+
+  // 2. MapLibre Globe/Terrain occlusion check
+  if (typeof map.transform.isLocationOccluded === 'function') {
+    if (map.transform.isLocationOccluded(mapLngLat)) {
+      return false;
+    }
+  }
+
+  // 3. Screen projection bounds check
+  const point = map.project([latLng.lng, latLng.lat]);
+  const canvas = map.getCanvas();
+  if (!canvas) return false;
+
+  const width = canvas.clientWidth || map.transform.width || window.innerWidth;
+  const height = canvas.clientHeight || map.transform.height || window.innerHeight;
+
+  // Check if projected point is within strict canvas bounds
+  if (point.x < 0 || point.x > width || point.y < 0 || point.y > height) {
+    return false;
+  }
+
+  // 4. Raycast / Unproject consistency check (ensures point is on visible terrain/globe surface and not sky)
+  try {
+    const unprojected = map.unproject([point.x, point.y]);
+    if (!unprojected || isNaN(unprojected.lat) || isNaN(unprojected.lng)) return false;
+    
+    let lngDiff = Math.abs(unprojected.lng - latLng.lng) % 360;
+    if (lngDiff > 180) lngDiff = 360 - lngDiff;
+    const latDiff = Math.abs(unprojected.lat - latLng.lat);
+
+    const zoom = map.getZoom();
+    const tolerance = zoom > 10 ? 0.5 : (zoom > 5 ? 2.0 : 10.0);
+
+    if (latDiff > tolerance || lngDiff > tolerance) {
+      return false;
+    }
+  } catch (e) {
+    return false;
+  }
+
+  return true;
+}
+
+function updatePopupMarkerVisibility() {
+  if (!lastLatLng) return;
+
+  const visible = isLocationVisible(lastLatLng);
+  const isMobile = window.innerWidth < 600;
+
+  if (window.currentPopup && window.currentPopup.isOpen()) {
+    const popupEl = window.currentPopup.getElement ? window.currentPopup.getElement() : document.querySelector('.maplibregl-popup');
+    if (popupEl) {
+      // On mobile (< 600px), popup is a fixed bottom sheet card, so it stays visible while reviewing climate data.
+      // On desktop (>= 600px), popup is anchored directly to map coordinates and becomes invisible when off-screen/occluded.
+      const popupVisible = isMobile ? true : visible;
+      popupEl.style.opacity = popupVisible ? '1' : '0';
+      popupEl.style.visibility = popupVisible ? 'visible' : 'hidden';
+      popupEl.style.pointerEvents = popupVisible ? 'auto' : 'none';
+    }
+  }
+
+  if (window.currentMarker) {
+    const markerEl = window.currentMarker.getElement();
+    if (markerEl) {
+      // Pin marker on map becomes invisible when off-screen/occluded in both desktop & mobile modes
+      markerEl.style.opacity = visible ? '1' : '0';
+      markerEl.style.visibility = visible ? 'visible' : 'hidden';
+      markerEl.style.pointerEvents = visible ? 'auto' : 'none';
+    }
+  }
+}
+
+map.on('move', updatePopupMarkerVisibility);
+map.on('render', updatePopupMarkerVisibility);
+
 // Rotate map camera bearing when scrolling horizontally or when holding Shift while scrolling
 map.getCanvas().addEventListener('wheel', (e) => {
   if (e.shiftKey) {
@@ -1242,6 +1352,7 @@ function updatePopup() {
     window.currentMarkerCleanup = () => map.off('sourcedata', onTerrainData);
   }
   syncUrl();
+  updatePopupMarkerVisibility();
 }
 
 const queryCache = {};
@@ -1500,24 +1611,53 @@ function showCoordinateLine(type, val) {
   activeLineType = type;
   activeLineVal = val;
   
-  let coordinates = [];
+  let features = [];
   if (type === 'lat') {
+    let coords1 = [];
     for (let lon = -180; lon <= 180; lon += 1) {
-      coordinates.push([lon, val]);
+      coords1.push([lon, val]);
+    }
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: coords1
+      },
+      properties: {}
+    });
+
+    if (Math.abs(val) > 0.0001) {
+      let coords2 = [];
+      for (let lon = -180; lon <= 180; lon += 1) {
+        coords2.push([lon, -val]);
+      }
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: coords2
+        },
+        properties: {}
+      });
     }
   } else if (type === 'lng') {
+    let coords = [];
     for (let lat = -85; lat <= 85; lat += 1) {
-      coordinates.push([val, lat]);
+      coords.push([val, lat]);
     }
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: coords
+      },
+      properties: {}
+    });
   }
 
   const geojson = {
-    type: 'Feature',
-    geometry: {
-      type: 'LineString',
-      coordinates: coordinates
-    },
-    properties: {}
+    type: 'FeatureCollection',
+    features: features
   };
 
   const source = map.getSource('coordinate-line-source');
