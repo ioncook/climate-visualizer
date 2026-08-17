@@ -540,6 +540,10 @@ body.nav-nw .maplibregl-canvas {
     display: none !important;
   }
 
+  #header-title-link {
+    display: none !important;
+  }
+
   #mobile-search-btn {
     display: flex !important;
   }

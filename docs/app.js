@@ -12,7 +12,7 @@ let lastQueryData = null;
 let lockedTooltipCoords = "";
 let currentMarker = null;
 let elevCache = {};
-let currentBasemapId = "dark";
+let currentBasemapId = "topo";
 
 const COLORS = {
   1: "rgb(0, 0, 255)", 2: "rgb(0, 120, 255)", 3: "rgb(70, 170, 250)", 4: "rgb(255, 0, 0)",
@@ -64,7 +64,7 @@ const map = new maplibregl.Map({
   maxZoom: 18,
   maxPitch: 75,
   pixelRatio: Math.min(window.devicePixelRatio, 2),
-  projection: 'globe',
+  projection: (localStorage.getItem('climate_projection') || 'mercator'),
   antialias: false,
   trackResize: true,
   collectResourceTiming: false,
@@ -146,23 +146,11 @@ function isLocationVisible(latLng) {
     return false;
   }
 
-  // 4. Raycast / Unproject consistency check (ensures point is on visible terrain/globe surface and not sky)
-  try {
-    const unprojected = map.unproject([point.x, point.y]);
-    if (!unprojected || isNaN(unprojected.lat) || isNaN(unprojected.lng)) return false;
-    
-    let lngDiff = Math.abs(unprojected.lng - latLng.lng) % 360;
-    if (lngDiff > 180) lngDiff = 360 - lngDiff;
-    const latDiff = Math.abs(unprojected.lat - latLng.lat);
-
-    const zoom = map.getZoom();
-    const tolerance = zoom > 10 ? 0.5 : (zoom > 5 ? 2.0 : 10.0);
-
-    if (latDiff > tolerance || lngDiff > tolerance) {
+  // 4. MapLibre 3D surface check (prevents sky floating in 3D / globe mode)
+  if (typeof map.transform.isPointOnMapSurface === 'function') {
+    if (!map.transform.isPointOnMapSurface(point)) {
       return false;
     }
-  } catch (e) {
-    return false;
   }
 
   return true;
@@ -258,23 +246,72 @@ lastLatLng = (urlParams.get('plat') && urlParams.get('plng')) ?
   { lat: parseFloat(urlParams.get('plat')), lng: parseFloat(urlParams.get('plng')) } : null;
 isPopupOpen = urlParams.get('p') === '1' && lastLatLng !== null;
 
-if (lastLatLng) {
-  const latAbs = Math.abs(lastLatLng.lat).toFixed(2), lngAbs = Math.abs(lastLatLng.lng).toFixed(2);
-  const latDir = lastLatLng.lat >= 0 ? 'N' : 'S', lngDir = lastLatLng.lng >= 0 ? 'E' : 'W';
-  lockedTooltipCoords = `
+let wasCoordsContextMenuFired = false;
+
+function handleCoordContextMenu(mapsUrl, event) {
+  const isTouch = event.pointerType === 'touch' || ('ontouchstart' in window && event.button === 0);
+  if (isTouch) {
+    event.preventDefault();
+    event.stopPropagation();
+    wasCoordsContextMenuFired = true;
+    if (navigator.vibrate) try { navigator.vibrate(50); } catch(e){}
+    window.location.href = mapsUrl;
+    return false;
+  }
+}
+window.handleCoordContextMenu = handleCoordContextMenu;
+
+function handleCoordClick(type, val, mapsUrl, event) {
+  event.stopPropagation();
+  
+  if (wasCoordsContextMenuFired) {
+    wasCoordsContextMenuFired = false;
+    event.preventDefault();
+    return false;
+  }
+
+  const isNewTab = event.button === 1 || event.ctrlKey || event.metaKey || event.shiftKey;
+  if (isNewTab) {
+    event.preventDefault();
+    window.open(mapsUrl, '_blank');
+    return false;
+  }
+
+  event.preventDefault();
+  window.toggleCoordinateLine(type, val);
+  return false;
+}
+window.handleCoordClick = handleCoordClick;
+
+function buildCoordsHtml(lat, lng) {
+  const clampedLat = Math.max(-90, Math.min(90, lat));
+  const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
+  const latAbs = Math.abs(clampedLat).toFixed(2), lngAbs = Math.abs(wrappedLng).toFixed(2);
+  const latDir = clampedLat >= 0 ? 'N' : 'S', lngDir = wrappedLng >= 0 ? 'E' : 'W';
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${clampedLat},${wrappedLng}`;
+  
+  return `
     <div style="display: flex; flex-direction: column; gap: 2px;">
-      <div style="text-decoration: underline; cursor: pointer;" 
-           onclick="event.stopPropagation(); window.toggleCoordinateLine('lat', ${lastLatLng.lat})"
-           ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
+      <a href="${mapsUrl}" target="_blank" rel="noopener"
+         style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none;" 
+         oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
+         onclick="return window.handleCoordClick('lat', ${clampedLat}, '${mapsUrl}', event)"
+         ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
         ${latAbs}° ${latDir}
-      </div>
-      <div style="text-decoration: underline; cursor: pointer;" 
-           onclick="event.stopPropagation(); window.toggleCoordinateLine('lng', ${lastLatLng.lng})"
-           ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
+      </a>
+      <a href="${mapsUrl}" target="_blank" rel="noopener"
+         style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none;" 
+         oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
+         onclick="return window.handleCoordClick('lng', ${wrappedLng}, '${mapsUrl}', event)"
+         ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
         ${lngAbs}° ${lngDir}
-      </div>
+      </a>
     </div>
   `;
+}
+
+if (lastLatLng) {
+  lockedTooltipCoords = buildCoordsHtml(lastLatLng.lat, lastLatLng.lng);
 }
 
 function setupBasemap(id) {
@@ -304,10 +341,6 @@ function setupBasemap(id) {
     tileSize: 256,
     attribution: attribution
   });
-
-  if (typeof map.setSourceTileLodParams === 'function') {
-    map.setSourceTileLodParams(2.0, 3.0, 'basemap-source');
-  }
 
   map.addLayer({
     id: 'basemap-layer',
@@ -501,9 +534,6 @@ map.on('load', () => {
       tileSize: 256,
       maxzoom: 7
     });
-    if (typeof map.setSourceTileLodParams === 'function') {
-      map.setSourceTileLodParams(2.0, 3.0, 'data-source');
-    }
   }
 
   map.addLayer({
@@ -842,22 +872,7 @@ searchInput.addEventListener('input', (e) => {
 function triggerLocationQuery(lat, lng, isClick = false) {
   const clampedLat = Math.max(-90, Math.min(90, lat));
   const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
-  const latAbs = Math.abs(clampedLat).toFixed(2), lngAbs = Math.abs(wrappedLng).toFixed(2);
-  const latDir = clampedLat >= 0 ? 'N' : 'S', lngDir = wrappedLng >= 0 ? 'E' : 'W';
-  lockedTooltipCoords = `
-    <div style="display: flex; flex-direction: column; gap: 2px;">
-      <div style="text-decoration: underline; cursor: pointer;" 
-           onclick="event.stopPropagation(); window.toggleCoordinateLine('lat', ${clampedLat})"
-           ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
-        ${latAbs}° ${latDir}
-      </div>
-      <div style="text-decoration: underline; cursor: pointer;" 
-           onclick="event.stopPropagation(); window.toggleCoordinateLine('lng', ${wrappedLng})"
-           ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
-        ${lngAbs}° ${lngDir}
-      </div>
-    </div>
-  `;
+  lockedTooltipCoords = buildCoordsHtml(lat, lng);
   lastLatLng = { lat: clampedLat, lng: wrappedLng };
   isPopupOpen = true;
   syncUrl();
@@ -988,10 +1003,10 @@ function loadStoredSettings() {
     if (storedTheme === 'light') document.body.classList.add('light-mode');
     else document.body.classList.remove('light-mode');
   }
-  const storedBasemap = localStorage.getItem('climate_basemap');
+  const storedBasemap = localStorage.getItem('climate_basemap') || 'topo';
   const storedUnits = localStorage.getItem('climate_units');
   const storedOpacity = localStorage.getItem('climate_opacity');
-  const storedProjection = localStorage.getItem('climate_projection');
+  const storedProjection = localStorage.getItem('climate_projection') || 'mercator';
 
   if (storedBasemap) {
     basemapSelect.value = storedBasemap;
@@ -1495,10 +1510,26 @@ map.on('click', (e) => {
 });
 
 let lastRightClickTime = 0;
+function resetCompass() {
+  if (map) {
+    map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+  }
+}
+window.resetCompass = resetCompass;
+
+function updateCompassRotation() {
+  const compass = document.getElementById('compass-needle-svg');
+  if (compass && map) {
+    compass.style.transform = `rotate(${-map.getBearing()}deg)`;
+  }
+}
+map.on('rotate', updateCompassRotation);
+map.on('move', updateCompassRotation);
+
 map.on('contextmenu', (e) => {
   if (window.innerWidth < 600 || e.originalEvent?.pointerType === 'touch') return;
   const now = Date.now();
-  if (now - lastRightClickTime < 500) { e.originalEvent.preventDefault(); map.easeTo({ pitch: 0, bearing: 0, duration: 800 }); }
+  if (now - lastRightClickTime < 500) { e.originalEvent.preventDefault(); resetCompass(); }
   lastRightClickTime = now;
 });
 
@@ -1613,46 +1644,48 @@ function showCoordinateLine(type, val) {
   
   let features = [];
   if (type === 'lat') {
-    let coords1 = [];
-    for (let lon = -180; lon <= 180; lon += 1) {
-      coords1.push([lon, val]);
-    }
-    features.push({
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: coords1
-      },
-      properties: {}
-    });
-
-    if (Math.abs(val) > 0.0001) {
-      let coords2 = [];
-      for (let lon = -180; lon <= 180; lon += 1) {
-        coords2.push([lon, -val]);
+    const chunkSize = 30;
+    for (let startLon = -540; startLon < 540; startLon += chunkSize) {
+      const endLon = startLon + chunkSize;
+      const coords = [];
+      for (let lon = startLon; lon <= endLon; lon += 1) {
+        coords.push([lon, val]);
       }
       features.push({
         type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: coords2
-        },
+        geometry: { type: 'LineString', coordinates: coords },
         properties: {}
       });
     }
-  } else if (type === 'lng') {
-    let coords = [];
-    for (let lat = -85; lat <= 85; lat += 1) {
-      coords.push([val, lat]);
+
+    if (Math.abs(val) > 0.0001) {
+      for (let startLon = -540; startLon < 540; startLon += chunkSize) {
+        const endLon = startLon + chunkSize;
+        const coords = [];
+        for (let lon = startLon; lon <= endLon; lon += 1) {
+          coords.push([lon, -val]);
+        }
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: {}
+        });
+      }
     }
-    features.push({
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: coords
-      },
-      properties: {}
-    });
+  } else if (type === 'lng') {
+    const chunkSize = 20;
+    for (let startLat = -89; startLat < 89; startLat += chunkSize) {
+      const endLat = Math.min(89, startLat + chunkSize);
+      const coords = [];
+      for (let lat = startLat; lat <= endLat; lat += 0.5) {
+        coords.push([val, lat]);
+      }
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: {}
+      });
+    }
   }
 
   const geojson = {
@@ -1666,7 +1699,9 @@ function showCoordinateLine(type, val) {
   } else {
     map.addSource('coordinate-line-source', {
       type: 'geojson',
-      data: geojson
+      data: geojson,
+      tolerance: 0,
+      buffer: 256
     });
   }
 
