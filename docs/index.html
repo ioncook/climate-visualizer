@@ -7,7 +7,7 @@
   <title>Climate Visualizer</title>
   <link rel="icon" href="favicon.png" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 
 <body>
@@ -150,11 +150,11 @@
               <option value="state">Subnational</option>
             </select>
           </div>
-          <div class="setting-row" id="mobile-pin-row">
-            <span>Mobile Pin Style</span>
-            <select id="mobile-pin-style">
-              <option value="classic">Classic</option>
-              <option value="contrast">High Contrast</option>
+          <div class="setting-row" id="multi-popup-row">
+            <span>Multiple Popups</span>
+            <select id="multi-popup-select">
+              <option value="off" selected>Off</option>
+              <option value="on">On</option>
             </select>
           </div>
         </div>
@@ -180,7 +180,7 @@
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=22"></script>
 </body>
 
 </html>

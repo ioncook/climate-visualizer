@@ -13,6 +13,7 @@ let lockedTooltipCoords = "";
 let currentMarker = null;
 let elevCache = {};
 let currentBasemapId = "topo";
+let activePopups = [];
 
 const COLORS = {
   1: "rgb(0, 0, 255)", 2: "rgb(0, 120, 255)", 3: "rgb(70, 170, 250)", 4: "rgb(255, 0, 0)",
@@ -90,6 +91,34 @@ window.addEventListener('resize', () => {
   map.resize();
 });
 
+function getDepth(latLng) {
+  if (!latLng || !map || !map.transform) return 0;
+  const isGlobe = (projectionSelect && projectionSelect.value === 'globe') || (map.transform && map.transform.isGlobeRendering);
+  if (isGlobe) {
+    const globMat = map.transform._globeViewProjMatrixNoCorrection ||
+      (map.transform.currentTransform && map.transform.currentTransform._globeViewProjMatrixNoCorrection);
+    if (globMat) {
+      const radLat = latLng.lat * Math.PI / 180;
+      const radLng = latLng.lng * Math.PI / 180;
+      const cosLat = Math.cos(radLat);
+      const x = Math.sin(radLng) * cosLat;
+      const y = Math.sin(radLat);
+      const z = Math.cos(radLng) * cosLat;
+      return x * globMat[3] + y * globMat[7] + z * globMat[11] + globMat[15];
+    }
+  } else {
+    const pixMat = map.transform._pixelMatrix3D || map.transform._pixelMatrix;
+    if (pixMat) {
+      const worldSize = map.transform.worldSize;
+      const mx = (latLng.lng + 180) / 360 * worldSize;
+      const radLat = latLng.lat * Math.PI / 180;
+      const my = (1 - Math.log(Math.tan(radLat) + 1 / Math.cos(radLat)) / Math.PI) / 2 * worldSize;
+      return mx * pixMat[3] + my * pixMat[7] + pixMat[15];
+    }
+  }
+  return 1;
+}
+
 function isLocationVisible(latLng) {
   if (!latLng || isNaN(latLng.lat) || isNaN(latLng.lng)) return false;
   if (!map || !map.transform) return false;
@@ -133,7 +162,7 @@ function isLocationVisible(latLng) {
     }
   }
 
-  // 3. Screen projection bounds check
+  // 3. Screen projection bounds check (with padding so popup body isn't clipped early)
   const point = map.project([latLng.lng, latLng.lat]);
   const canvas = map.getCanvas();
   if (!canvas) return false;
@@ -141,8 +170,8 @@ function isLocationVisible(latLng) {
   const width = canvas.clientWidth || map.transform.width || window.innerWidth;
   const height = canvas.clientHeight || map.transform.height || window.innerHeight;
 
-  // Check if projected point is within strict canvas bounds
-  if (point.x < 0 || point.x > width || point.y < 0 || point.y > height) {
+  const pad = 400;
+  if (point.x < -pad || point.x > width + pad || point.y < -pad || point.y > height + pad) {
     return false;
   }
 
@@ -157,32 +186,44 @@ function isLocationVisible(latLng) {
 }
 
 function updatePopupMarkerVisibility() {
-  if (!lastLatLng) return;
-
-  const visible = isLocationVisible(lastLatLng);
   const isMobile = window.innerWidth < 600;
 
-  if (window.currentPopup && window.currentPopup.isOpen()) {
-    const popupEl = window.currentPopup.getElement ? window.currentPopup.getElement() : document.querySelector('.maplibregl-popup');
-    if (popupEl) {
-      // On mobile (< 600px), popup is a fixed bottom sheet card, so it stays visible while reviewing climate data.
-      // On desktop (>= 600px), popup is anchored directly to map coordinates and becomes invisible when off-screen/occluded.
+  // Sort desktop popups by depth so popup nearest to camera is on top
+  if (!isMobile && activePopups.length > 0) {
+    const depths = activePopups.map(item => ({
+      item,
+      depth: getDepth(item.latLng)
+    }));
+    // Sort descending by depth: farthest first (lower z-index), nearest last (highest z-index)
+    depths.sort((a, b) => b.depth - a.depth);
+    depths.forEach((entry, idx) => {
+      const el = (entry.item.popup && entry.item.popup.getElement ? entry.item.popup.getElement() : entry.item.popup?._container);
+      if (el) {
+        el.style.zIndex = String(2000 + idx + 1);
+      }
+    });
+  }
+
+  activePopups.forEach(item => {
+    const visible = isLocationVisible(item.latLng);
+    const popupEl = (item.popup && item.popup.getElement ? item.popup.getElement() : item.popup?._container);
+    if (popupEl && item.popup && item.popup.isOpen()) {
       const popupVisible = isMobile ? true : visible;
       popupEl.style.opacity = popupVisible ? '1' : '0';
       popupEl.style.visibility = popupVisible ? 'visible' : 'hidden';
       popupEl.style.pointerEvents = popupVisible ? 'auto' : 'none';
     }
-  }
 
-  if (window.currentMarker) {
-    const markerEl = window.currentMarker.getElement();
-    if (markerEl) {
-      // Pin marker on map becomes invisible when off-screen/occluded in both desktop & mobile modes
-      markerEl.style.opacity = visible ? '1' : '0';
-      markerEl.style.visibility = visible ? 'visible' : 'hidden';
-      markerEl.style.pointerEvents = visible ? 'auto' : 'none';
+    if (item.marker) {
+      const markerEl = item.marker.getElement();
+      if (markerEl) {
+        // Pin marker on map becomes invisible when off-screen/occluded in both desktop & mobile modes
+        markerEl.style.opacity = visible ? '1' : '0';
+        markerEl.style.visibility = visible ? 'visible' : 'hidden';
+        markerEl.style.pointerEvents = visible ? 'auto' : 'none';
+      }
     }
-  }
+  });
 }
 
 map.on('move', updatePopupMarkerVisibility);
@@ -291,22 +332,20 @@ function buildCoordsHtml(lat, lng) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${clampedLat},${wrappedLng}`;
   
   return `
-    <div style="display: flex; flex-direction: column; gap: 2px;">
-      <a href="${mapsUrl}" target="_blank" rel="noopener"
-         style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none;" 
-         oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
-         onclick="return window.handleCoordClick('lat', ${clampedLat}, '${mapsUrl}', event)"
-         ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
-        ${latAbs}° ${latDir}
-      </a>
-      <a href="${mapsUrl}" target="_blank" rel="noopener"
-         style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none;" 
-         oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
-         onclick="return window.handleCoordClick('lng', ${wrappedLng}, '${mapsUrl}', event)"
-         ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
-        ${lngAbs}° ${lngDir}
-      </a>
-    </div>
+    <a href="${mapsUrl}" target="_blank" rel="noopener"
+       style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none; line-height: inherit;" 
+       oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
+       onclick="return window.handleCoordClick('lat', ${clampedLat}, '${mapsUrl}', event)"
+       ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
+      ${latAbs}° ${latDir}
+    </a>
+    <a href="${mapsUrl}" target="_blank" rel="noopener"
+       style="color: inherit; text-decoration: underline; cursor: pointer; -webkit-user-select: none; user-select: none; line-height: inherit;" 
+       oncontextmenu="return window.handleCoordContextMenu('${mapsUrl}', event)"
+       onclick="return window.handleCoordClick('lng', ${wrappedLng}, '${mapsUrl}', event)"
+       ondblclick="event.stopPropagation(); window.hideCoordinateLine()">
+      ${lngAbs}° ${lngDir}
+    </a>
   `;
 }
 
@@ -638,9 +677,10 @@ function syncUrl() {
   params.set('era', eraSelect.value);
   params.set('comp', compareSelect.value);
 
-  if (isPopupOpen && lastLatLng) {
-    params.set('plat', lastLatLng.lat.toFixed(4));
-    params.set('plng', lastLatLng.lng.toFixed(4));
+  if (activePopups.length > 0) {
+    const last = activePopups[activePopups.length - 1];
+    params.set('plat', last.latLng.lat.toFixed(4));
+    params.set('plng', last.latLng.lng.toFixed(4));
     params.set('p', '1');
   } else {
     params.delete('plat');
@@ -801,23 +841,31 @@ if (window.innerWidth >= 600) {
   });
 }
 
-map.on('popupopen', () => { isPopupOpen = true; syncUrl(); });
+map.on('popupopen', () => {
+  isPopupOpen = activePopups.length > 0;
+  syncUrl();
+});
 map.on('popupclose', () => {
-  isPopupOpen = false;
-  if (window.currentMarker) window.currentMarker.remove();
+  isPopupOpen = activePopups.length > 0;
+  if (activePopups.length === 0) {
+    document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
+  }
   syncUrl();
 });
 
 function maybeRefresh() {
-  if (window.currentPopup && window.currentPopup.isOpen() && lastLatLng) {
-    queryLocation(lastLatLng.lat, lastLatLng.lng, true);
+  if (activePopups.length > 0) {
+    const popupsToRefresh = [...activePopups];
+    popupsToRefresh.forEach(item => {
+      queryLocation(item.latLng.lat, item.latLng.lng, true, false, item);
+    });
   }
 }
 
 unitsSelect.addEventListener('change', () => {
   localStorage.setItem('climate_units', unitsSelect.value);
   updateLayers();
-  if (window.currentPopup && window.currentPopup.isOpen()) updatePopup();
+  updateAllPopups();
   updateLegend(currentLayerType, isCompareMode());
 });
 opacitySlider.addEventListener('input', (e) => {
@@ -1039,9 +1087,9 @@ function loadStoredSettings() {
 
   const storedExag = localStorage.getItem('climate_exaggeration');
   if (storedExag) document.getElementById('terrain-exaggeration').value = storedExag;
-  const storedPinStyle = localStorage.getItem('climate_mobile_pin') || 'classic';
-  const pinSelect = document.getElementById('mobile-pin-style');
-  if (pinSelect) pinSelect.value = storedPinStyle;
+  const storedMultiPopup = localStorage.getItem('climate_multi_popup') || 'off';
+  const multiPopupSelect = document.getElementById('multi-popup-select');
+  if (multiPopupSelect) multiPopupSelect.value = storedMultiPopup;
 }
 
 const themeSelect = document.getElementById('theme');
@@ -1050,14 +1098,31 @@ themeSelect.addEventListener('change', () => {
   if (val === 'light') document.body.classList.add('light-mode');
   else document.body.classList.remove('light-mode');
   localStorage.setItem('climate_theme', val);
-  if (isPopupOpen) updatePopup();
+  updateAllPopups();
 });
 
-const pinSelect = document.getElementById('mobile-pin-style');
-if (pinSelect) {
-  pinSelect.addEventListener('change', () => {
-    localStorage.setItem('climate_mobile_pin', pinSelect.value);
-    if (isPopupOpen) updatePopup();
+function isMultiPopupEnabled() {
+  if (window.innerWidth < 600) return false;
+  const select = document.getElementById('multi-popup-select');
+  return select ? select.value === 'on' : (localStorage.getItem('climate_multi_popup') === 'on');
+}
+
+const multiPopupSelect = document.getElementById('multi-popup-select');
+if (multiPopupSelect) {
+  multiPopupSelect.addEventListener('change', () => {
+    localStorage.setItem('climate_multi_popup', multiPopupSelect.value);
+    if (multiPopupSelect.value === 'off' && activePopups.length > 1) {
+      const keepItem = activePopups[activePopups.length - 1];
+      const toRemove = activePopups.slice(0, -1);
+      toRemove.forEach(p => {
+        if (p.popup) p.popup.remove();
+        if (p.marker) p.marker.remove();
+      });
+      activePopups = [keepItem];
+      window.currentPopup = keepItem.popup;
+      syncUrl();
+      updatePopupMarkerVisibility();
+    }
   });
 }
 
@@ -1087,6 +1152,7 @@ makeSelectScrollable(basemapSelect);
 makeSelectScrollable(unitsSelect);
 makeSelectScrollable(projectionSelect);
 makeSelectScrollable(document.getElementById('terrain-select'));
+if (multiPopupSelect) makeSelectScrollable(multiPopupSelect);
 
 document.getElementById('status').innerText = "Click map to load high-res climate data";
 
@@ -1208,10 +1274,97 @@ function getTrewartha(t, p, lat) {
   return { code: group + sub + thermalSub, coldDesc, warmDesc, coldMonth, warmMonth, minT, maxT };
 }
 
-function updatePopup() {
-  if (!lastQueryData || !lastLatLng) return;
-  const { d1, d2, isCompare, era, compareEra } = lastQueryData;
-  const latlng = lastLatLng;
+function clearAllPopups() {
+  const toClear = [...activePopups];
+  activePopups = [];
+  toClear.forEach(item => {
+    if (item.popup) {
+      item.popup.remove();
+    }
+    if (item.marker) {
+      item.marker.remove();
+      item.marker = null;
+    }
+    if (item.markerCleanup) {
+      item.markerCleanup();
+      item.markerCleanup = null;
+    }
+  });
+  document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+  document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
+  window.currentPopup = null;
+  window.currentMarker = null;
+  isPopupOpen = false;
+  syncUrl();
+}
+window.clearAllPopups = clearAllPopups;
+
+function setupMobilePullDown(popup, popupEl) {
+  if (!popupEl) return;
+  let startY = 0;
+  let currentY = 0;
+  let isDragging = false;
+
+  const onTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    currentY = startY;
+    isDragging = false;
+    popupEl.style.transition = 'none';
+  };
+
+  const onTouchMove = (e) => {
+    if (e.touches.length !== 1) return;
+    currentY = e.touches[0].clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) {
+      const content = popupEl.querySelector('.maplibregl-popup-content');
+      const scrollTop = content ? content.scrollTop : 0;
+      if (scrollTop <= 0) {
+        isDragging = true;
+        if (e.cancelable) e.preventDefault();
+        popupEl.style.setProperty('--sheet-y', `${deltaY}px`);
+      }
+    } else if (isDragging) {
+      popupEl.style.setProperty('--sheet-y', '0px');
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const deltaY = currentY - startY;
+    popupEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease';
+
+    if (deltaY > 60) {
+      popupEl.style.setProperty('--sheet-y', '100%');
+      popupEl.style.opacity = '0';
+      setTimeout(() => {
+        popup.remove();
+      }, 200);
+    } else {
+      popupEl.style.setProperty('--sheet-y', '0px');
+    }
+  };
+
+  const onTouchCancel = () => {
+    if (isDragging) {
+      isDragging = false;
+      popupEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+      popupEl.style.setProperty('--sheet-y', '0px');
+    }
+  };
+
+  popupEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  popupEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  popupEl.addEventListener('touchend', onTouchEnd, { passive: true });
+  popupEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
+}
+
+function buildPopupHtml(item) {
+  const { d1, d2, isCompare, era, compareEra } = item.queryData;
+  const latlng = item.latLng;
   const tre = getTrewartha(d1.t, d1.p, latlng.lat);
   const info1 = LEGENDS[d1.i] || ["Unk", "Unknown"];
   const info2 = isCompare ? (LEGENDS[d2.i] || ["Unk", "Unknown"]) : null;
@@ -1221,21 +1374,26 @@ function updatePopup() {
   const avgT1 = d1.t.reduce((acc, curr) => acc + curr, 0) / d1.t.length;
   const totalP2 = isCompare ? d2.p.reduce((acc, curr) => acc + curr, 0) : null;
   const avgT2 = isCompare ? d2.t.reduce((acc, curr) => acc + curr, 0) / d2.t.length : null;
+  const isMobile = window.innerWidth < 600;
 
-  let html = `<div style="min-width: 280px; font-family: inherit; color: var(--text);">`;
-  const coordHtml = lockedTooltipCoords;
+  let html = '';
+  if (isMobile) {
+    html += `<div class="mobile-pull-handle-bar"></div>`;
+  }
+  html += `<div style="min-width: 280px; font-family: inherit; color: var(--text);">`;
+  const coordHtml = item.lockedTooltipCoords;
 
   if (isCompare) {
     html += `
       <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:5px; display: flex; align-items: center; min-height: 36px;">
-        <div style="display: flex; align-items: center; cursor: pointer; gap: 4px; margin-top: -6px;" onclick="event.stopPropagation(); setLayer('koppen')">
-          <span style="background:${COLORS[d1.i]}; color:#000; padding:3px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info1[0]}</span>
+        <div style="display: flex; align-items: center; cursor: pointer; gap: 4px;" onclick="event.stopPropagation(); setLayer('koppen')">
+          <span style="background:${COLORS[d1.i]}; color:#000; padding:1.5px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info1[0]}</span>
           <span style="margin: 0 4px; color: var(--text-dim); font-size: 16px;">&rarr;</span>
-          <span style="background:${COLORS[d2.i]}; color:#000; padding:3px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info2[0]}</span>
+          <span style="background:${COLORS[d2.i]}; color:#000; padding:1.5px 8px; border-radius:3px; font-size: 14px; text-decoration: underline;">${info2[0]}</span>
         </div>
-        <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2; align-self: center; margin-top: 2px;">
+        <div class="popup-header-right">
           ${coordHtml}
-          <div style="color:var(--text-dim);">Elev: ${lastQueryData.elevation || 'N/A'}${(lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+          <div>Elev: ${item.queryData.elevation || 'N/A'}${(item.queryData.elevation && item.queryData.elevation !== '---' && item.queryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
         </div>
       </div>`;
   } else {
@@ -1243,16 +1401,16 @@ function updatePopup() {
       <div style="font-weight:700; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:5px; display: flex; align-items: center;">
         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
            <div style="display: flex; align-items: center; gap: 8px;">
-             <span style="background:${COLORS[d1.i]}; color:#000; padding:2px 6px; border-radius:3px; text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[0]}</span>
+             <span style="background:${COLORS[d1.i]}; color:#000; padding:1px 6px; border-radius:3px; text-decoration: underline; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[0]}</span>
              <span style="margin-top: 1px; cursor: pointer;" onclick="event.stopPropagation(); setLayer('koppen')">${info1[1]}</span>
            </div>
            <div style="font-size: 10px; color: var(--text-dim);">
              ${tre.code} - <span style="color:${getTempColor(tre.minT)}">${tre.coldDesc}</span> <span style="color:var(--text-dim);">(${tre.coldMonth})</span> to <span style="color:${getTempColor(tre.maxT)}">${tre.warmDesc}</span> <span style="color:var(--text-dim);">(${tre.warmMonth})</span>
            </div>
         </div>
-        <div style="text-align: right; font-size: 10px; color: var(--text-dim); margin-left: auto; line-height: 1.2; align-self: center; margin-top: 2px;">
+        <div class="popup-header-right">
           ${coordHtml}
-          <div style="color:var(--text-dim);">Elev: ${lastQueryData.elevation || 'N/A'}${(lastQueryData.elevation && lastQueryData.elevation !== '---' && lastQueryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
+          <div>Elev: ${item.queryData.elevation || 'N/A'}${(item.queryData.elevation && item.queryData.elevation !== '---' && item.queryData.elevation !== 'N/A') ? (isMetric ? 'm' : 'ft') : ''}</div>
         </div>
       </div>`;
   }
@@ -1260,11 +1418,9 @@ function updatePopup() {
   if (isCompare) {
     const dT = avgT2 - avgT1;
     const dP = ((totalP2 - totalP1) / Math.max(totalP1, 1)) * 100;
-    // Match map colors (HSL logic from build_compare.py)
-    const isModern = era === '1991_2020';
     const isDark = document.body.classList.contains('light-mode') === false;
     const lightness = isDark ? '65%' : '45%';
-    const dTf = dT * 1.8; // dT is always in C in our data, so *1.8 for F delta
+    const dTf = dT * 1.8;
     const tHue = dTf >= 0 ? 120 * (1 - Math.min(dTf / 3.0, 1)) : 120 + 120 * Math.min(Math.abs(dTf) / 1.5, 1);
     const tColor = `hsl(${tHue}, 100%, ${lightness})`;
 
@@ -1286,7 +1442,6 @@ function updatePopup() {
     `;
   } else {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const isModern = era === '1991_2020';
     const maxP = Math.max(...d1.p), minP = Math.min(...d1.p);
     const maxIdx = d1.p.indexOf(maxP), minIdx = d1.p.indexOf(minP);
     const isLight = document.body.classList.contains('light-mode');
@@ -1326,49 +1481,99 @@ function updatePopup() {
     `;
   }
   html += `</div>`;
-  if (window.currentPopup && window.currentPopup.isOpen()) {
-    window.currentPopup.setLngLat([latlng.lng, latlng.lat]).setHTML(html);
+  return html;
+}
+
+function showPopupForItem(item) {
+  const isMobile = window.innerWidth < 600;
+  const multiEnabled = isMultiPopupEnabled();
+  const html = buildPopupHtml(item);
+
+  if (item.popup && item.popup.isOpen()) {
+    item.popup.setLngLat([item.latLng.lng, item.latLng.lat]).setHTML(html);
+  } else {
+    if (!multiEnabled) {
+      clearAllPopups();
+    }
+
+    const popup = new maplibregl.Popup({
+      maxWidth: '450px',
+      className: 'climate-popup',
+      anchor: 'bottom',
+      autoPan: false,
+      closeOnClick: false,
+      closeButton: !isMobile
+    })
+      .setLngLat([item.latLng.lng, item.latLng.lat])
+      .setHTML(html)
+      .addTo(map);
+
+    item.popup = popup;
+
+    popup.on('close', () => {
+      if (item.marker) {
+        item.marker.remove();
+        item.marker = null;
+      }
+      if (item.markerCleanup) {
+        item.markerCleanup();
+        item.markerCleanup = null;
+      }
+      const idx = activePopups.indexOf(item);
+      if (idx !== -1) {
+        activePopups.splice(idx, 1);
+      }
+      isPopupOpen = activePopups.length > 0;
+      window.currentPopup = activePopups[activePopups.length - 1]?.popup || null;
+      window.currentMarker = activePopups[activePopups.length - 1]?.marker || null;
+      syncUrl();
+    });
+
+    const popupEl = popup.getElement ? popup.getElement() : popup._container;
+    if (isMobile && popupEl) {
+      setupMobilePullDown(popup, popupEl);
+    }
+
+    activePopups.push(item);
   }
 
-  else {
-    if (window.currentPopup) window.currentPopup.remove();
-    window.currentPopup = new maplibregl.Popup({ maxWidth: '450px', className: 'climate-popup', anchor: 'bottom', autoPan: false })
-      .setLngLat([latlng.lng, latlng.lat]).setHTML(html).addTo(map);
-  }
+  window.currentPopup = item.popup;
+  isPopupOpen = true;
 
-  window.currentPopup.off('close');
-  window.currentPopup.on('close', () => {
-    document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
-    if (window.currentMarkerCleanup) { window.currentMarkerCleanup(); window.currentMarkerCleanup = null; }
-    if (window.currentMarker) window.currentMarker = null;
-  });
+  if (isMobile) {
+    if (item.marker) {
+      if (item.markerCleanup) { item.markerCleanup(); item.markerCleanup = null; }
+      item.marker.remove();
+    }
+    const el = document.createElement('div');
+    el.style.width = '24px';
+    el.style.height = '34px';
+    el.innerHTML = `<svg width="24" height="34" viewBox="0 -1 24 33" style="overflow: visible;"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="var(--pin-color)" stroke="var(--pin-stroke)" stroke-width="0.6" stroke-linejoin="round" fill-rule="evenodd" /></svg>`;
+    const markerLngLat = [item.latLng.lng, item.latLng.lat];
+    item.marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(markerLngLat).addTo(map);
+    window.currentMarker = item.marker;
 
-  if (window.currentMarker) {
-    if (window.currentMarkerCleanup) { window.currentMarkerCleanup(); window.currentMarkerCleanup = null; }
-    window.currentMarker.remove();
-  }
-  if (window.innerWidth < 600) {
-    const el = document.createElement('div'); el.style.width = '24px'; el.style.height = '34px';
-    const pinStyle = document.getElementById('mobile-pin-style') ? document.getElementById('mobile-pin-style').value : (localStorage.getItem('climate_mobile_pin') || 'classic');
-    if (pinStyle === 'contrast') { el.style.mixBlendMode = 'difference'; el.innerHTML = `<svg width="24" height="34" viewBox="0 -1 24 33"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="#ffffff" fill-rule="evenodd" /></svg>`; }
-    else el.innerHTML = `<svg width="24" height="34" viewBox="0 -1 24 33" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="var(--pin-color)" fill-rule="evenodd" /></svg>`;
-    const markerLngLat = [latlng.lng, latlng.lat];
-    window.currentMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(markerLngLat).addTo(map);
-
-    // Re-anchor whenever terrain tiles load/update to prevent jumping between
-    // terrain elevation and globe surface (sea level fallback).
     const onTerrainData = (e) => {
-      if (!window.currentMarker) { map.off('sourcedata', onTerrainData); return; }
-      if (e.sourceId === 'terrain-source') window.currentMarker.setLngLat(markerLngLat);
+      if (!item.marker) { map.off('sourcedata', onTerrainData); return; }
+      if (e.sourceId === 'terrain-source') item.marker.setLngLat(markerLngLat);
     };
     map.on('sourcedata', onTerrainData);
-    // Also re-anchor after idle in case tiles were already cached
-    map.once('idle', () => { if (window.currentMarker) window.currentMarker.setLngLat(markerLngLat); });
-    window.currentMarkerCleanup = () => map.off('sourcedata', onTerrainData);
+    map.once('idle', () => { if (item.marker) item.marker.setLngLat(markerLngLat); });
+    item.markerCleanup = () => map.off('sourcedata', onTerrainData);
   }
+
   syncUrl();
   updatePopupMarkerVisibility();
 }
+
+function updateAllPopups() {
+  activePopups.forEach(item => {
+    if (item.popup && item.popup.isOpen()) {
+      item.popup.setHTML(buildPopupHtml(item));
+    }
+  });
+}
+window.updateAllPopups = updateAllPopups;
 
 const queryCache = {};
 
@@ -1394,13 +1599,14 @@ function decodeRle(rle, px, py) {
   return 0;
 }
 
-async function queryLocation(lat, lng, isRefresh = false, isClick = false) {
+async function queryLocation(lat, lng, isRefresh = false, isClick = false, existingItem = null) {
   if (!lat) return;
   const wrappedLng = ((lng + 180) % 360 + 360) % 360 - 180;
   const clampedLat = Math.max(-89.9, Math.min(89.9, lat));
-  if (queryAbortController) queryAbortController.abort();
-  queryAbortController = new AbortController();
-  const signal = queryAbortController.signal;
+  if (!isRefresh && queryAbortController) queryAbortController.abort();
+  if (!isRefresh) queryAbortController = new AbortController();
+  const signal = isRefresh ? (new AbortController()).signal : queryAbortController.signal;
+
   lastQueryData = null;
   const eras = ["1901_1930", "1931_1960", "1961_1990", "1991_2020"];
   let era1 = eraSelect.value, era2 = compareSelect.value;
@@ -1466,40 +1672,88 @@ async function queryLocation(lat, lng, isRefresh = false, isClick = false) {
 
     if (!kid1 || !d1_raw) {
       document.getElementById('status').innerText = "Ocean (No Data)";
-      if (window.currentPopup) window.currentPopup.remove();
-      document.querySelectorAll('.maplibregl-marker').forEach(m => m.remove());
-      if (window.currentMarker) { window.currentMarker.remove(); window.currentMarker = null; }
+      clearAllPopups();
       return;
     }
 
-    lastQueryData = {
+    const queryData = {
       d1: { i: kid1, t: d1_raw.t, p: d1_raw.p },
       d2: (isComp && d2_raw) ? { i: kid2 || kid1, t: d2_raw.t, p: d2_raw.p } : null,
-      isCompare: isComp && d2_raw, era: eraSelect.value, compareEra: compareSelect.value, elevation: "---"
+      isCompare: isComp && d2_raw,
+      era: eraSelect.value,
+      compareEra: compareSelect.value,
+      elevation: existingItem?.queryData?.elevation || "---"
     };
+    lastQueryData = queryData;
     document.getElementById('status').innerText = isComp ? "Comparison Data Ready" : "Data Ready";
-    updatePopup();
+
+    let item = existingItem;
+    if (!item) {
+      if (isMultiPopupEnabled()) {
+        item = activePopups.find(p => Math.abs(p.latLng.lat - clampedLat) < 0.001 && Math.abs(p.latLng.lng - wrappedLng) < 0.001);
+      } else {
+        item = activePopups[0];
+      }
+    }
+
+    if (item) {
+      item.queryData = queryData;
+      item.latLng = { lat: clampedLat, lng: wrappedLng };
+      item.lockedTooltipCoords = buildCoordsHtml(clampedLat, wrappedLng);
+    } else {
+      item = {
+        popup: null,
+        marker: null,
+        markerCleanup: null,
+        latLng: { lat: clampedLat, lng: wrappedLng },
+        lockedTooltipCoords: buildCoordsHtml(clampedLat, wrappedLng),
+        queryData: queryData
+      };
+    }
+
+    showPopupForItem(item);
 
     const elevKey = `${clampedLat.toFixed(3)}_${wrappedLng.toFixed(3)}`;
-    if (window.elevCache && window.elevCache[elevKey]) { lastQueryData.elevation = window.elevCache[elevKey]; updatePopup(); }
-    else {
+    if (window.elevCache && window.elevCache[elevKey]) {
+      item.queryData.elevation = window.elevCache[elevKey];
+      showPopupForItem(item);
+    } else {
       if (!window.elevCache) window.elevCache = {};
       const elevUrl = `https://api.open-meteo.com/v1/elevation?latitude=${clampedLat}&longitude=${wrappedLng}`;
-      const timeoutId = setTimeout(() => { if (lastQueryData && lastQueryData.elevation === "---") { lastQueryData.elevation = null; updatePopup(); } }, 3000);
-      fetch(elevUrl, { signal }).then(r => { clearTimeout(timeoutId); return r.ok ? r.json() : null; }).then(elevData => {
-        if (signal.aborted || !lastQueryData) return;
+      const timeoutId = setTimeout(() => {
+        if (item.queryData && item.queryData.elevation === "---") {
+          item.queryData.elevation = null;
+          showPopupForItem(item);
+        }
+      }, 3000);
+
+      fetch(elevUrl, { signal }).then(r => {
+        clearTimeout(timeoutId);
+        return r.ok ? r.json() : null;
+      }).then(elevData => {
+        if (signal.aborted || !item.queryData) return;
         if (elevData && elevData.elevation && elevData.elevation[0] !== undefined) {
           let val = elevData.elevation[0];
           if (document.getElementById('units').value === 'imperial') val = val * 3.28084;
           const rounded = Math.round(val);
-          lastQueryData.elevation = rounded; window.elevCache[elevKey] = rounded; updatePopup();
-        } else { lastQueryData.elevation = null; updatePopup(); }
-      }).catch(() => { if (lastQueryData) { lastQueryData.elevation = null; updatePopup(); } });
+          item.queryData.elevation = rounded;
+          window.elevCache[elevKey] = rounded;
+          showPopupForItem(item);
+        } else {
+          item.queryData.elevation = null;
+          showPopupForItem(item);
+        }
+      }).catch(() => {
+        if (item.queryData) {
+          item.queryData.elevation = null;
+          showPopupForItem(item);
+        }
+      });
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
       document.getElementById('status').innerText = "Ocean (No Data)";
-      if (window.currentPopup) window.currentPopup.remove();
+      clearAllPopups();
     }
   }
 }
@@ -1633,7 +1887,11 @@ map.on('render', () => {
   }
   map.triggerRepaint();
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && window.currentPopup) window.currentPopup.remove(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    clearAllPopups();
+  }
+});
 
 let activeLineType = null;
 let activeLineVal = null;
