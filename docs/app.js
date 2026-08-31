@@ -636,8 +636,9 @@ document.getElementById('terrain-select').addEventListener('change', (e) => {
 });
 
 const terrainExInput = document.getElementById('terrain-exaggeration');
-terrainExInput.addEventListener('change', () => {
+function updateTerrainExaggeration() {
   const val = parseFloat(terrainExInput.value);
+  if (isNaN(val)) return;
   localStorage.setItem('climate_exaggeration', val);
   if (document.getElementById('terrain-select').value === '3d') {
     if (val > 0) {
@@ -654,7 +655,9 @@ terrainExInput.addEventListener('change', () => {
       map.triggerRepaint();
     }
   }
-});
+}
+terrainExInput.addEventListener('change', updateTerrainExaggeration);
+terrainExInput.addEventListener('input', updateTerrainExaggeration);
 terrainExInput.addEventListener('wheel', (e) => {
   e.preventDefault();
   const delta = e.deltaY > 0 ? -0.5 : 0.5;
@@ -1034,15 +1037,19 @@ window.toggleSettings = (e) => {
   document.getElementById('settings-menu').classList.toggle('show');
 };
 
-window.addEventListener('click', () => {
+window.addEventListener('click', (e) => {
+  if (!e.target.closest('#settings-menu') && !e.target.closest('#settings-btn')) {
+    document.getElementById('settings-menu').classList.remove('show');
+  }
+});
+
+map.on('dragstart', () => {
   document.getElementById('settings-menu').classList.remove('show');
 });
 
-map.on('move', () => {
-  document.getElementById('settings-menu').classList.remove('show');
-});
-
-document.getElementById('settings-menu').addEventListener('click', (e) => e.stopPropagation());
+const settingsMenuEl = document.getElementById('settings-menu');
+settingsMenuEl.addEventListener('click', (e) => e.stopPropagation());
+settingsMenuEl.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
 
 function loadStoredSettings() {
   const storedTheme = localStorage.getItem('climate_theme');
