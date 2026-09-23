@@ -229,14 +229,14 @@ function updatePopupMarkerVisibility() {
 map.on('move', updatePopupMarkerVisibility);
 map.on('render', updatePopupMarkerVisibility);
 
-// Rotate map camera bearing when scrolling horizontally or when holding Shift while scrolling
+// Rotate map camera bearing when scrolling horizontally (if enabled) or when holding Shift while scrolling
 map.getCanvas().addEventListener('wheel', (e) => {
   if (e.shiftKey) {
     const bearing = map.getBearing();
     map.setBearing(bearing - e.deltaY * 0.15);
     e.preventDefault();
     e.stopPropagation();
-  } else if (e.deltaX !== 0) {
+  } else if (e.deltaX !== 0 && isScrollRotationEnabled()) {
     const bearing = map.getBearing();
     map.setBearing(bearing - e.deltaX * 0.15);
     if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
@@ -1097,6 +1097,10 @@ function loadStoredSettings() {
   const storedMultiPopup = localStorage.getItem('climate_multi_popup') || 'off';
   const multiPopupSelect = document.getElementById('multi-popup-select');
   if (multiPopupSelect) multiPopupSelect.value = storedMultiPopup;
+
+  const storedScrollRot = localStorage.getItem('climate_scroll_rotation') || 'off';
+  const scrollRotSelect = document.getElementById('scroll-rotation-select');
+  if (scrollRotSelect) scrollRotSelect.value = storedScrollRot;
 }
 
 const themeSelect = document.getElementById('theme');
@@ -1112,6 +1116,18 @@ function isMultiPopupEnabled() {
   if (window.innerWidth < 600) return false;
   const select = document.getElementById('multi-popup-select');
   return select ? select.value === 'on' : (localStorage.getItem('climate_multi_popup') === 'on');
+}
+
+function isScrollRotationEnabled() {
+  const select = document.getElementById('scroll-rotation-select');
+  return select ? select.value === 'on' : (localStorage.getItem('climate_scroll_rotation') === 'on');
+}
+
+const scrollRotationSelect = document.getElementById('scroll-rotation-select');
+if (scrollRotationSelect) {
+  scrollRotationSelect.addEventListener('change', () => {
+    localStorage.setItem('climate_scroll_rotation', scrollRotationSelect.value);
+  });
 }
 
 const multiPopupSelect = document.getElementById('multi-popup-select');
@@ -1160,6 +1176,7 @@ makeSelectScrollable(unitsSelect);
 makeSelectScrollable(projectionSelect);
 makeSelectScrollable(document.getElementById('terrain-select'));
 if (multiPopupSelect) makeSelectScrollable(multiPopupSelect);
+if (scrollRotationSelect) makeSelectScrollable(scrollRotationSelect);
 
 document.getElementById('status').innerText = "Click map to load high-res climate data";
 

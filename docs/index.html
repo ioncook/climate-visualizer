@@ -14,8 +14,7 @@
   <div id="nav-crosshair"></div>
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 8px;">
-      <a href="https://ioncook.github.io" target="_blank"
-        style="display: flex; align-items: center;">
+      <a href="https://ioncook.github.io" target="_blank" style="display: flex; align-items: center;">
         <picture style="display: flex; align-items: center;">
           <source media="(max-width: 599px)" srcset="favicon.png">
           <img src="logo.png" alt="Logo" style="height: 24px; border-radius: 4px;">
@@ -73,9 +72,8 @@
         </button>
         <button id="compass-btn" title="Reset North & Pitch" onclick="window.resetCompass()"
           style="background:none; border:none; padding: 0 5px; cursor:pointer; display:flex; align-items:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888"
-            stroke-width="2" id="compass-needle-svg"
-            style="transition: transform 0.15s ease-out; transform-origin: center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"
+            id="compass-needle-svg" style="transition: transform 0.15s ease-out; transform-origin: center;">
             <polygon points="12,2 16,12 8,12" fill="#888" stroke="#888" />
             <polyline points="16,12 12,22 8,12" fill="none" stroke="#888" />
           </svg>
@@ -157,6 +155,13 @@
               <option value="on">On</option>
             </select>
           </div>
+          <div class="setting-row" id="scroll-rotation-row">
+            <span>Side-scroll Rotation</span>
+            <select id="scroll-rotation-select">
+              <option value="off" selected>Off</option>
+              <option value="on">On</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -180,7 +185,7 @@
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@^5.0.0/dist/maplibre-gl.js"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=23"></script>
 </body>
 
 </html>
