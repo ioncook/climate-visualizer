@@ -609,15 +609,45 @@ map.on('load', () => {
     const storedHill = localStorage.getItem('climate_hillshade') === 'true';
     terrainSelect.value = storedHill ? '3d' : 'off';
   }
+  const initialUrlParams = new URLSearchParams(window.location.search);
+  const initialPopupsToLoad = [];
+  const pParam = initialUrlParams.get('p');
+  if (pParam && pParam !== '1') {
+    const pairs = pParam.split(';');
+    for (const pair of pairs) {
+      const parts = pair.split(',');
+      if (parts.length === 2) {
+        const la = parseFloat(parts[0]);
+        const lo = parseFloat(parts[1]);
+        if (!isNaN(la) && !isNaN(lo)) {
+          initialPopupsToLoad.push({ lat: la, lng: lo });
+        }
+      }
+    }
+  } else {
+    const plat = parseFloat(initialUrlParams.get('plat'));
+    const plng = parseFloat(initialUrlParams.get('plng'));
+    if (!isNaN(plat) && !isNaN(plng)) {
+      initialPopupsToLoad.push({ lat: plat, lng: plng });
+    }
+  }
+  if (initialPopupsToLoad.length > 1) {
+    const multiSel = document.getElementById('multi-popup-select');
+    if (multiSel) multiSel.value = 'on';
+    localStorage.setItem('climate_multi_popup', 'on');
+  }
+  window.isInitialLoadingPopups = initialPopupsToLoad.length > 0;
   applyTerrainState();
   updateLayers();
-
-  const params = new URLSearchParams(window.location.search);
-  const plat = parseFloat(params.get('plat'));
-  const plng = parseFloat(params.get('plng'));
-  if (!isNaN(plat) && !isNaN(plng) && params.get('p') === '1') {
+  if (initialPopupsToLoad.length > 0) {
     isPopupOpen = true;
-    requestAnimationFrame(() => queryLocation(plat, plng));
+    requestAnimationFrame(async () => {
+      for (const pt of initialPopupsToLoad) {
+        await queryLocation(pt.lat, pt.lng, true);
+      }
+      window.isInitialLoadingPopups = false;
+      syncUrl();
+    });
   }
   updateBorders();
 });
@@ -681,11 +711,10 @@ function syncUrl() {
   params.set('comp', compareSelect.value);
 
   if (activePopups.length > 0) {
-    const last = activePopups[activePopups.length - 1];
-    params.set('plat', last.latLng.lat.toFixed(4));
-    params.set('plng', last.latLng.lng.toFixed(4));
-    params.set('p', '1');
-  } else {
+    params.set('p', activePopups.map(item => `${item.latLng.lat.toFixed(4)},${item.latLng.lng.toFixed(4)}`).join(';'));
+    params.delete('plat');
+    params.delete('plng');
+  } else if (!window.isInitialLoadingPopups) {
     params.delete('plat');
     params.delete('plng');
     params.delete('p');
