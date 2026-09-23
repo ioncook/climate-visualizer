@@ -273,10 +273,9 @@ map.getContainer().addEventListener('wheel', (e) => {
 }, { passive: false });
 
 const BASEMAPS = {
-  dark: { url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
   topo: { url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM' },
-  physical: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Earthstar Geographics, Garmin, FAO, METI/NASA, USGS' },
-  light: { url: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  dark: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' },
+  light: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' },
   osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
   satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Earthstar Geographics' }
 };
@@ -370,7 +369,14 @@ function setupBasemap(id) {
     if (map.getLayer('black-basemap')) map.setLayoutProperty('black-basemap', 'visibility', 'none');
   }
 
-  const { url, attribution } = BASEMAPS[id];
+  let config = BASEMAPS[id];
+  if (!config) {
+    id = 'topo';
+    config = BASEMAPS.topo;
+    currentBasemapId = 'topo';
+    if (basemapSelect) basemapSelect.value = 'topo';
+  }
+  const { url, attribution } = config;
   if (map.getLayer('basemap-layer')) map.removeLayer('basemap-layer');
   if (map.getSource('basemap-source')) map.removeSource('basemap-source');
 
@@ -1200,10 +1206,13 @@ function makeSelectScrollable(selectEl) {
 
 makeSelectScrollable(eraSelect);
 makeSelectScrollable(compareSelect);
+makeSelectScrollable(themeSelect);
 makeSelectScrollable(basemapSelect);
 makeSelectScrollable(unitsSelect);
 makeSelectScrollable(projectionSelect);
 makeSelectScrollable(document.getElementById('terrain-select'));
+const bordersSelect = document.getElementById('borders-select');
+if (bordersSelect) makeSelectScrollable(bordersSelect);
 if (multiPopupSelect) makeSelectScrollable(multiPopupSelect);
 if (scrollRotationSelect) makeSelectScrollable(scrollRotationSelect);
 
